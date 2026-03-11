@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+l<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
@@ -825,6 +825,8 @@
         }
         updatePlayPauseUI();
         video.removeEventListener('loadedmetadata', resume);
+        // ALTERADO: após trocar qualidade, notificar servidor do tempo/estado para manter a sincronização.
+        try { sendControl(!video.paused); } catch(e){}
       };
       video.addEventListener('loadedmetadata', resume);
 
@@ -899,307 +901,6 @@
       }
     }
 
-    async function togglePlay(){
-      if (isYouTube) {
-        if (!ytPlayer) return;
-        const st = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
-        if (st === 1) {
-          ytPlayer.pauseVideo();
-          sendControl(false);
-        } else {
-          ytPlayer.playVideo();
-          sendControl(true);
-        }
-        updatePlayPauseUI();
-        showControlsTemporarily();
-        return;
-      }
-
-      if (video.paused || video.ended) {
-        const p = video.play();
-        if (p && p.then) p.catch(()=>{});
-      } else {
-        video.pause();
-      }
-      updatePlayPauseUI();
-      showControlsTemporarily();
-    }
-
-    playBtn.addEventListener('click', (e)=>{ togglePlay(); e.stopPropagation(); });
-    backBtn.addEventListener('click', (e)=> {
-      if (isYouTube && ytPlayer) {
-        const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
-        ytPlayer.seekTo(Math.max(0, cur - 10), true);
-      } else {
-        video.currentTime = Math.max(0, video.currentTime - 10);
-      }
-      showControlsTemporarily(); e.stopPropagation();
-    });
-    forwardBtn.addEventListener('click', (e)=> {
-      if (isYouTube && ytPlayer) {
-        const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
-        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : cur;
-        ytPlayer.seekTo(Math.min(dur, cur + 10), true);
-      } else {
-        video.currentTime = Math.min((video.duration||0), video.currentTime + 10);
-      }
-      showControlsTemporarily(); e.stopPropagation();
-    });
-
-    muteBtn.addEventListener('click', (e)=> {
-      if (isYouTube && ytPlayer) {
-        if (ytPlayer.isMuted && ytPlayer.isMuted()) {
-          ytPlayer.unMute();
-          volIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/>';
-        } else {
-          ytPlayer.mute();
-          volIcon.innerHTML = '<path d="M16.5 12c0-1.77-.77-3.36-2-4.47v8.94c1.23-1.11 2-2.7 2-4.47zM5 9v6h4l5 5V4L9 9H5z"/>';
-        }
-      } else {
-        video.muted = !video.muted;
-        if (video.muted) {
-          volIcon.innerHTML = '<path d="M16.5 12c0-1.77-.77-3.36-2-4.47v8.94c1.23-1.11 2-2.7 2-4.47zM5 9v6h4l5 5V4L9 9H5z"/>';
-        } else {
-          volIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/>';
-        }
-      }
-      showControlsTemporarily();
-      e.stopPropagation();
-    });
-
-    fsBtn.addEventListener('click', (e) => {
-      const el = videoInner;
-      if (!document.fullscreenElement) {
-        if (el.requestFullscreen) el.requestFullscreen();
-        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-      } else {
-        if (document.exitFullscreen) document.exitFullscreen();
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-      }
-      showControlsTemporarily();
-      e.stopPropagation();
-    });
-
-    function updateProgressUI(){
-      if (isYouTube && ytPlayer) {
-        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
-        const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
-        if (!isFinite(dur) || dur === 0) {
-          progressBar.style.width = '0%';
-          currentTimeEl.textContent = '0:00';
-          durationEl.textContent = fmtTime(dur || 0);
-          return;
-        }
-        const pct = (cur / dur) * 100;
-        progressBar.style.width = pct + '%';
-        currentTimeEl.textContent = fmtTime(cur);
-        durationEl.textContent = fmtTime(dur);
-        return;
-      }
-
-      if (!video || !isFinite(video.duration) || video.duration === 0) {
-        progressBar.style.width = '0%';
-        currentTimeEl.textContent = '0:00';
-        durationEl.textContent = fmtTime(video.duration || 0);
-        return;
-      }
-      const pct = (video.currentTime / video.duration) * 100;
-      progressBar.style.width = pct + '%';
-      currentTimeEl.textContent = fmtTime(video.currentTime);
-      durationEl.textContent = fmtTime(video.duration);
-    }
-
-    progress.addEventListener('click', (e)=>{
-      const rect = progress.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const pct = Math.max(0, Math.min(1, x / rect.width));
-      if (isYouTube && ytPlayer) {
-        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
-        if (dur > 0) ytPlayer.seekTo(pct * dur, true);
-      } else {
-        if (isFinite(video.duration)) {
-          video.currentTime = pct * video.duration;
-        }
-      }
-      showControlsTemporarily();
-      e.stopPropagation();
-    });
-
-    video.addEventListener('timeupdate', updateProgressUI);
-    video.addEventListener('loadedmetadata', ()=> {
-      durationEl.textContent = fmtTime(video.duration);
-      updateProgressUI();
-      updatePlayPauseUI();
-    });
-    video.addEventListener('play', ()=> { updatePlayPauseUI(); sendControl(true); });
-    video.addEventListener('pause', ()=> { updatePlayPauseUI(); sendControl(false); });
-    video.addEventListener('seeked', ()=> { updateProgressUI(); sendControl(!video.paused); });
-
-    videoInner.addEventListener('mousemove', (e)=>{ showControlsTemporarily(); });
-    videoInner.addEventListener('touchstart', ()=> showControlsTemporarily());
-
-    document.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && document.activeElement !== chatInput && document.activeElement.tagName.toLowerCase() !== 'input') {
-        e.preventDefault();
-        togglePlay();
-      }
-    });
-
-    // -------------------------
-    // YouTube API helpers (mantive fetch/meta helpers)
-    // -------------------------
-    function loadYouTubeAPI(){
-      return new Promise((resolve) => {
-        if (ytApiReady) return resolve();
-        if (window.YT && window.YT.Player) {
-          ytApiReady = true; return resolve();
-        }
-        const tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        tag.async = true;
-        document.head.appendChild(tag);
-        window.onYouTubeIframeAPIReady = function(){
-          ytApiReady = true;
-          resolve();
-        };
-        setTimeout(()=> {
-          if (!ytApiReady && window.YT && window.YT.Player) { ytApiReady = true; resolve(); }
-        }, 3000);
-      });
-    }
-
-    function showUnembeddableUI(id, code){
-      ytContainer.style.display = 'none';
-      placeholder.style.display = 'flex';
-      const link = `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
-      const msg = document.createElement('div');
-      msg.style.color = '#fff';
-      msg.style.textAlign = 'center';
-      msg.innerHTML = `<div style="margin-bottom:8px">Este vídeo não permite incorporação (código ${code}).</div><a href="${link}" target="_blank" rel="noopener" style="background:#fff;color:#000;padding:8px 12px;border-radius:8px;text-decoration:none">Abrir no YouTube</a>`;
-      uploadStatus.innerHTML = '';
-      uploadStatus.appendChild(msg);
-      try { socket.emit('chat-message', { room, user: 'System', text: `Vídeo não incorporável: ${link}`, ts: Date.now() }); } catch(e){}
-    }
-
-    // openYouTubePlayer rebuilt (mantive lógica segura de origin + enablejsapi)
-    function openYouTubePlayer(id){
-      isYouTube = true;
-      clearYouTubePlayerInterval();
-      ytContainer.innerHTML = '';
-      if (ytPlayer && typeof ytPlayer.destroy === 'function') {
-        try { ytPlayer.destroy(); } catch(e){}
-      }
-      const iframeId = 'yt-e-player-iframe-' + Math.random().toString(36).slice(2,9);
-      const wrapper = document.createElement('div');
-      wrapper.style.width = '100%';
-      wrapper.style.height = '100%';
-      wrapper.id = 'yt-wrapper-' + iframeId;
-
-      const origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
-      // ADJUSTED: add controls=0 and iv_load_policy=3 to reduce YouTube overlays and annotations.
-      const src = 'https://www.youtube.com/embed/' + encodeURIComponent(id) +
-                  '?enablejsapi=1&controls=0&iv_load_policy=3&rel=0&modestbranding=1&playsinline=1&autoplay=1&origin=' + encodeURIComponent(origin);
-
-      const iframe = document.createElement('iframe');
-      iframe.id = iframeId;
-      iframe.width = '100%';
-      iframe.height = '100%';
-      iframe.frameBorder = '0';
-      // keep autoplay and fullscreen permissions but we disable pointer events so the iframe UI doesn't capture clicks
-      iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
-      iframe.allowFullscreen = true;
-      iframe.src = src;
-      iframe.style.border = '0';
-      iframe.style.width = '100%';
-      iframe.style.height = '100%';
-      iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
-
-      // Prevent iframe from capturing pointer events so your overlay is the only interactive UI.
-      // The player is still controllable via the YT API (postMessage) from this page.
-      try { iframe.style.pointerEvents = 'none'; } catch (e) { /* ignore */ }
-
-      wrapper.appendChild(iframe);
-      ytContainer.appendChild(wrapper);
-      ytContainer.style.display = 'block';
-      placeholder.style.display = 'none';
-      video.style.display = 'none';
-
-      loadYouTubeAPI().then(()=> {
-        try {
-          // NOTE: playerVars.controls set to 0 to hide YouTube's built-in controls so only our overlay is visible.
-          ytPlayer = new YT.Player(iframeId, {
-            videoId: id,
-            playerVars: {
-              controls: 0,
-              modestbranding: 1,
-              rel: 0,
-              playsinline: 1,
-              disablekb: 1,
-              autoplay: 1,
-              iv_load_policy: 3,
-              origin: origin
-            },
-            events: {
-              onReady: (e) => {
-                try {
-                  const f = document.getElementById(iframeId);
-                  if (f) f.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
-                } catch(e){}
-                try { e.target.playVideo(); } catch(e){}
-                updatePlayPauseUI();
-                startYouTubePoll();
-                qualityLabel.textContent = 'Qualidade: YouTube';
-                try { uploadStatus.innerHTML = ''; } catch(e){}
-              },
-              onStateChange: (e) => {
-                updatePlayPauseUI();
-                if (isHost) {
-                  const playing = (e.data === YT.PlayerState.PLAYING);
-                  sendControl(playing);
-                }
-              },
-              onError: (e) => {
-                console.warn('YT onError', e.data);
-                if (e.data === 101 || e.data === 150) {
-                  showUnembeddableUI(id, e.data);
-                } else {
-                  if (uploadStatus) uploadStatus.textContent = 'Vídeo indisponível (código ' + e.data + ').';
-                  try { e.target.destroy && e.target.destroy(); } catch(_){}
-                  ytPlayer = null;
-                  isYouTube = false;
-                  ytContainer.style.display = 'none';
-                  placeholder.style.display = 'flex';
-                  qualityLabel.textContent = 'Qualidade: -';
-                }
-              }
-            }
-          });
-        } catch (err) {
-          console.warn('Erro criando YT.Player', err);
-          if (uploadStatus) uploadStatus.textContent = 'Falha ao criar o player do YouTube.';
-          ytContainer.style.display = 'none';
-          placeholder.style.display = 'flex';
-          isYouTube = false;
-        }
-      }).catch(err=>{
-        console.warn('YT API load failed', err);
-        if (uploadStatus) uploadStatus.textContent = 'Falha ao carregar o player do YouTube.';
-        ytContainer.style.display = 'none';
-        placeholder.style.display = 'flex';
-      });
-    }
-
-    function startYouTubePoll(){
-      clearYouTubePlayerInterval();
-      ytPollInterval = setInterval(()=> {
-        if (!ytPlayer) return;
-        try { updateProgressUI(); } catch(e){}
-      }, 250);
-    }
-    function clearYouTubePlayerInterval(){
-      if (ytPollInterval) { clearInterval(ytPollInterval); ytPollInterval = null; }
-    }
-
     // -------------------------
     // sync emit
     // -------------------------
@@ -1212,8 +913,15 @@
       } else {
         time = video.currentTime || 0;
       }
-      const payload = { room, time: time, playing: !!playing, ts: nowMs() };
+      const payload = { room, time: time, playing: !!playing, ts: nowMs(), client: socket.id, host: !!isHost };
       safeEmit('control', payload);
+
+      // ALTERADO: se o cliente NÃO é host, pedir ao servidor o estado autorizado (request-sync) logo em seguida.
+      // Isso corrige casos em que o servidor considera o host a única fonte de verdade:
+      // o guest emite sua intenção e pede a sincronização oficial — evita perder a referência.
+      if (!isHost) {
+        setTimeout(()=> { try { safeEmit('request-sync', { room, ts: nowMs(), client: socket.id }); } catch(e){} }, 250);
+      }
     }
 
     // -------------------------
@@ -1230,12 +938,21 @@
     });
 
     socket.on('room-count', n => { roomCount.textContent = (n || 0) + ' pessoas assistindo'; });
-    socket.on('chat-history', hist => { messages.innerHTML=''; if (Array.isArray(hist)) hist.forEach(m=> appendMessage(m)); });
+
+    // ALTERADO: chat-history -> mantém autoscroll coerente e preserva histórico rolável.
+    socket.on('chat-history', hist => {
+      messages.innerHTML='';
+      if (Array.isArray(hist)) hist.forEach(m=> appendMessage(m));
+      // tentativa de deixar o scroll no final ao carregar histórico
+      try { messages.scrollTop = messages.scrollHeight; } catch(e){}
+    });
+
     socket.on('chat-message', msg => appendMessage(msg));
     socket.on('chat-cleared', ()=> messages.innerHTML='');
     socket.on('chat-error', e => alert(e?.error || 'Erro no chat'));
 
-    socket.on('sync', (payload) => {
+    // ALTERADO: centralizei a rotina de aplicar sync em handleSync e escuto tanto 'sync' quanto 'control' (alguns servidores emitem 'control' pro broadcast)
+    function handleSync(payload) {
       if (!payload || typeof payload.ts !== 'number') return;
       if (payload.ts <= lastAppliedTs) return;
       lastAppliedTs = payload.ts;
@@ -1266,13 +983,19 @@
           }
         }
       } catch(e) { console.error(e); syncing=false; }
-    });
+    }
+    // original listener replaced to call handleSync
+    socket.on('sync', handleSync);
+    // ALTERADO: também escutar 'control' vindo do servidor (alguns backends re-broadcastam com esse nome)
+    socket.on('control', handleSync);
 
     // UI actions: create/join
     createBtn.addEventListener('click', () => {
       const r = roomInput.value.trim(); if (!r) return alert('Digite o nome da sala');
       room = r; isHost = true; askNick();
       socket.emit('create-room', room);
+      // ALTERADO: pedir sync logo após criar a sala para garantir estado inicial
+      try { safeEmit('request-sync', { room, ts: nowMs(), client: socket.id }); } catch(e){}
       uploadAreaShow(true); roomTitle.textContent = 'Sala ' + room; logStatus('Você é host — envie o vídeo');
     });
 
@@ -1280,6 +1003,8 @@
       const r = roomInput.value.trim(); if (!r) return alert('Digite o nome da sala');
       room = r; isHost = false; askNick();
       socket.emit('join-room', room);
+      // ALTERADO: solicitar estado atual ao servidor (sync) assim que entrar
+      try { safeEmit('request-sync', { room, ts: nowMs(), client: socket.id }); } catch(e){}
       uploadAreaShow(false); roomTitle.textContent = 'Sala ' + room; logStatus('Entrou na sala — aguardando vídeo');
     });
 
@@ -1614,10 +1339,15 @@
 
     function escapeHtml(s){ if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
     function formatTime(ts){ const d = new Date(ts); return d.toLocaleTimeString(); }
+
+    // ALTERADO: autoscroll do chat — só rola para baixo se o usuário já estiver perto do final.
     function appendMessage(msg){
       const el = document.createElement('div'); el.className = 'msg' + (msg.user === nickname ? ' mine' : '');
       el.innerHTML = `<strong style="font-size:12px">${escapeHtml(msg.user)}</strong><div style="margin-top:6px">${escapeHtml(msg.text)}</div><div style="font-size:11px;color:#999;margin-top:6px">${formatTime(msg.ts || Date.now())}</div>`;
-      messages.appendChild(el); messages.scrollTop = messages.scrollHeight;
+      // detect if user is near bottom
+      const atBottom = (messages.scrollHeight - messages.clientHeight - messages.scrollTop) < 80;
+      messages.appendChild(el);
+      if (atBottom) { messages.scrollTop = messages.scrollHeight; } // only auto-scroll if user was at/bottom
     }
 
     sendBtn.addEventListener('click', sendChat);
@@ -1628,6 +1358,343 @@
       socket.emit('chat-message', { room, user: nickname || 'Guest', text: txt, ts: nowMs() });
       chatInput.value='';
     }
+
+    // -------------------------
+    // YouTube API helpers (mantive fetch/meta helpers)
+    // -------------------------
+    function loadYouTubeAPI(){
+      return new Promise((resolve) => {
+        if (ytApiReady) return resolve();
+        if (window.YT && window.YT.Player) {
+          ytApiReady = true; return resolve();
+        }
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        tag.async = true;
+        document.head.appendChild(tag);
+        window.onYouTubeIframeAPIReady = function(){
+          ytApiReady = true;
+          resolve();
+        };
+        setTimeout(()=> {
+          if (!ytApiReady && window.YT && window.YT.Player) { ytApiReady = true; resolve(); }
+        }, 3000);
+      });
+    }
+
+    function showUnembeddableUI(id, code){
+      ytContainer.style.display = 'none';
+      placeholder.style.display = 'flex';
+      const link = `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+      const msg = document.createElement('div');
+      msg.style.color = '#fff';
+      msg.style.textAlign = 'center';
+      msg.innerHTML = `<div style="margin-bottom:8px">Este vídeo não permite incorporação (código ${code}).</div><a href="${link}" target="_blank" rel="noopener" style="background:#fff;color:#000;padding:8px 12px;border-radius:8px;text-decoration:none">Abrir no YouTube</a>`;
+      uploadStatus.innerHTML = '';
+      uploadStatus.appendChild(msg);
+      try { socket.emit('chat-message', { room, user: 'System', text: `Vídeo não incorporável: ${link}`, ts: Date.now() }); } catch(e){}
+    }
+
+    // openYouTubePlayer rebuilt (mantive lógica segura de origin + enablejsapi)
+    function openYouTubePlayer(id){
+      isYouTube = true;
+      clearYouTubePlayerInterval();
+      ytContainer.innerHTML = '';
+      if (ytPlayer && typeof ytPlayer.destroy === 'function') {
+        try { ytPlayer.destroy(); } catch(e){}
+      }
+      const iframeId = 'yt-e-player-iframe-' + Math.random().toString(36).slice(2,9);
+      const wrapper = document.createElement('div');
+      wrapper.style.width = '100%';
+      wrapper.style.height = '100%';
+      wrapper.id = 'yt-wrapper-' + iframeId;
+
+      const origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+      // ADJUSTED: add controls=0 and iv_load_policy=3 to reduce YouTube overlays and annotations.
+      const src = 'https://www.youtube.com/embed/' + encodeURIComponent(id) +
+                  '?enablejsapi=1&controls=0&iv_load_policy=3&rel=0&modestbranding=1&playsinline=1&autoplay=1&origin=' + encodeURIComponent(origin);
+
+      const iframe = document.createElement('iframe');
+      iframe.id = iframeId;
+      iframe.width = '100%';
+      iframe.height = '100%';
+      iframe.frameBorder = '0';
+      // keep autoplay and fullscreen permissions but we disable pointer events so the iframe UI doesn't capture clicks
+      iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+      iframe.allowFullscreen = true;
+      iframe.src = src;
+      iframe.style.border = '0';
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+
+      // Prevent iframe from capturing pointer events so your overlay is the only interactive UI.
+      // The player is still controllable via the YT API (postMessage) from this page.
+      try { iframe.style.pointerEvents = 'none'; } catch (e) { /* ignore */ }
+
+      wrapper.appendChild(iframe);
+      ytContainer.appendChild(wrapper);
+      ytContainer.style.display = 'block';
+      placeholder.style.display = 'none';
+      video.style.display = 'none';
+
+      loadYouTubeAPI().then(()=> {
+        try {
+          // NOTE: playerVars.controls set to 0 to hide YouTube's built-in controls so only our overlay is visible.
+          ytPlayer = new YT.Player(iframeId, {
+            videoId: id,
+            playerVars: {
+              controls: 0,
+              modestbranding: 1,
+              rel: 0,
+              playsinline: 1,
+              disablekb: 1,
+              autoplay: 1,
+              iv_load_policy: 3,
+              origin: origin
+            },
+            events: {
+              onReady: (e) => {
+                try {
+                  const f = document.getElementById(iframeId);
+                  if (f) f.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
+                } catch(e){}
+                try { e.target.playVideo(); } catch(e){}
+                updatePlayPauseUI();
+                startYouTubePoll();
+                qualityLabel.textContent = 'Qualidade: YouTube';
+                try { uploadStatus.innerHTML = ''; } catch(e){}
+              },
+              onStateChange: (e) => {
+                updatePlayPauseUI();
+                if (isHost) {
+                  const playing = (e.data === YT.PlayerState.PLAYING);
+                  sendControl(playing);
+                } else {
+                  // ALTERADO: when a guest triggers state change (e.g. via our overlay), we still emit and request authoritative sync.
+                  const playing = (e.data === YT.PlayerState.PLAYING);
+                  sendControl(playing);
+                }
+              },
+              onError: (e) => {
+                console.warn('YT onError', e.data);
+                if (e.data === 101 || e.data === 150) {
+                  showUnembeddableUI(id, e.data);
+                } else {
+                  if (uploadStatus) uploadStatus.textContent = 'Vídeo indisponível (código ' + e.data + ').';
+                  try { e.target.destroy && e.target.destroy(); } catch(_){}
+                  ytPlayer = null;
+                  isYouTube = false;
+                  ytContainer.style.display = 'none';
+                  placeholder.style.display = 'flex';
+                  qualityLabel.textContent = 'Qualidade: -';
+                }
+              }
+            }
+          });
+        } catch (err) {
+          console.warn('Erro criando YT.Player', err);
+          if (uploadStatus) uploadStatus.textContent = 'Falha ao criar o player do YouTube.';
+          ytContainer.style.display = 'none';
+          placeholder.style.display = 'flex';
+          isYouTube = false;
+        }
+      }).catch(err=>{
+        console.warn('YT API load failed', err);
+        if (uploadStatus) uploadStatus.textContent = 'Falha ao carregar o player do YouTube.';
+        ytContainer.style.display = 'none';
+        placeholder.style.display = 'flex';
+      });
+    }
+
+    function startYouTubePoll(){
+      clearYouTubePlayerInterval();
+      ytPollInterval = setInterval(()=> {
+        if (!ytPlayer) return;
+        try { updateProgressUI(); } catch(e){}
+      }, 250);
+    }
+    function clearYouTubePlayerInterval(){
+      if (ytPollInterval) { clearInterval(ytPollInterval); ytPollInterval = null; }
+    }
+
+    // -------------------------
+    // CONTROLS (play/seek/mute/forward/back)
+    // -------------------------
+    playBtn.addEventListener('click', (e)=>{ togglePlay(); e.stopPropagation(); });
+    backBtn.addEventListener('click', (e)=> {
+      if (isYouTube && ytPlayer) {
+        const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
+        ytPlayer.seekTo(Math.max(0, cur - 10), true);
+        // ALTERADO: notificar servidor após alteração de seek via botão
+        try { sendControl(!false); } catch(e){}
+      } else {
+        video.currentTime = Math.max(0, video.currentTime - 10);
+        try { sendControl(!video.paused); } catch(e){}
+      }
+      showControlsTemporarily(); e.stopPropagation();
+    });
+    forwardBtn.addEventListener('click', (e)=> {
+      if (isYouTube && ytPlayer) {
+        const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
+        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : cur;
+        ytPlayer.seekTo(Math.min(dur, cur + 10), true);
+        // ALTERADO: notificar servidor após alteração de seek via botão
+        try { sendControl(!false); } catch(e){}
+      } else {
+        video.currentTime = Math.min((video.duration||0), video.currentTime + 10);
+        try { sendControl(!video.paused); } catch(e){}
+      }
+      showControlsTemporarily(); e.stopPropagation();
+    });
+
+    muteBtn.addEventListener('click', (e)=> {
+      if (isYouTube && ytPlayer) {
+        if (ytPlayer.isMuted && ytPlayer.isMuted()) {
+          ytPlayer.unMute();
+          volIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/>';
+        } else {
+          ytPlayer.mute();
+          volIcon.innerHTML = '<path d="M16.5 12c0-1.77-.77-3.36-2-4.47v8.94c1.23-1.11 2-2.7 2-4.47zM5 9v6h4l5 5V4L9 9H5z"/>';
+        }
+      } else {
+        video.muted = !video.muted;
+        if (video.muted) {
+          volIcon.innerHTML = '<path d="M16.5 12c0-1.77-.77-3.36-2-4.47v8.94c1.23-1.11 2-2.7 2-4.47zM5 9v6h4l5 5V4L9 9H5z"/>';
+        } else {
+          volIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/>';
+        }
+      }
+      showControlsTemporarily();
+      e.stopPropagation();
+    });
+
+    fsBtn.addEventListener('click', (e) => {
+      const el = videoInner;
+      if (!document.fullscreenElement) {
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      }
+      showControlsTemporarily();
+      e.stopPropagation();
+    });
+
+    function updateProgressUI(){
+      if (isYouTube && ytPlayer) {
+        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
+        if (!isFinite(dur) || dur === 0) {
+          progressBar.style.width = '0%';
+          currentTimeEl.textContent = '0:00';
+          durationEl.textContent = fmtTime(dur || 0);
+          return;
+        }
+        const pct = (cur / dur) * 100;
+        progressBar.style.width = pct + '%';
+        currentTimeEl.textContent = fmtTime(cur);
+        durationEl.textContent = fmtTime(dur);
+        return;
+      }
+
+      if (!video || !isFinite(video.duration) || video.duration === 0) {
+        progressBar.style.width = '0%';
+        currentTimeEl.textContent = '0:00';
+        durationEl.textContent = fmtTime(video.duration || 0);
+        return;
+      }
+      const pct = (video.currentTime / video.duration) * 100;
+      progressBar.style.width = pct + '%';
+      currentTimeEl.textContent = fmtTime(video.currentTime);
+      durationEl.textContent = fmtTime(video.duration);
+    }
+
+    progress.addEventListener('click', (e)=>{
+      const rect = progress.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, x / rect.width));
+      if (isYouTube && ytPlayer) {
+        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        if (dur > 0) {
+          ytPlayer.seekTo(pct * dur, true);
+          // ALTERADO: after guest/host seek via progress, emit control to server
+          try { sendControl(true); } catch(e){}
+        }
+      } else {
+        if (isFinite(video.duration)) {
+          video.currentTime = pct * video.duration;
+          // ALTERADO: after local video seek, emit control
+          try { sendControl(!video.paused); } catch(e){}
+        }
+      }
+      showControlsTemporarily();
+      e.stopPropagation();
+    });
+
+    video.addEventListener('timeupdate', updateProgressUI);
+    video.addEventListener('loadedmetadata', ()=> {
+      durationEl.textContent = fmtTime(video.duration);
+      updateProgressUI();
+      updatePlayPauseUI();
+    });
+    // ALTERADO: play/pause/seek events já emitem controle — mantive, mas sendControl agora pede request-sync para guests
+    video.addEventListener('play', ()=> { updatePlayPauseUI(); sendControl(true); });
+    video.addEventListener('pause', ()=> { updatePlayPauseUI(); sendControl(false); });
+    video.addEventListener('seeked', ()=> { updateProgressUI(); sendControl(!video.paused); });
+
+    videoInner.addEventListener('mousemove', (e)=>{ showControlsTemporarily(); });
+    videoInner.addEventListener('touchstart', ()=> showControlsTemporarily());
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && document.activeElement !== chatInput && document.activeElement.tagName.toLowerCase() !== 'input') {
+        e.preventDefault();
+        togglePlay();
+      }
+    });
+
+    // -------------------------
+    // YouTube API helpers (mantive fetch/meta helpers)
+    // -------------------------
+    function loadYouTubeAPI(){
+      return new Promise((resolve) => {
+        if (ytApiReady) return resolve();
+        if (window.YT && window.YT.Player) {
+          ytApiReady = true; return resolve();
+        }
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        tag.async = true;
+        document.head.appendChild(tag);
+        window.onYouTubeIframeAPIReady = function(){
+          ytApiReady = true;
+          resolve();
+        };
+        setTimeout(()=> {
+          if (!ytApiReady && window.YT && window.YT.Player) { ytApiReady = true; resolve(); }
+        }, 3000);
+      });
+    }
+
+    function showUnembeddableUI(id, code){
+      ytContainer.style.display = 'none';
+      placeholder.style.display = 'flex';
+      const link = `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+      const msg = document.createElement('div');
+      msg.style.color = '#fff';
+      msg.style.textAlign = 'center';
+      msg.innerHTML = `<div style="margin-bottom:8px">Este vídeo não permite incorporação (código ${code}).</div><a href="${link}" target="_blank" rel="noopener" style="background:#fff;color:#000;padding:8px 12px;border-radius:8px;text-decoration:none">Abrir no YouTube</a>`;
+      uploadStatus.innerHTML = '';
+      uploadStatus.appendChild(msg);
+      try { socket.emit('chat-message', { room, user: 'System', text: `Vídeo não incorporável: ${link}`, ts: Date.now() }); } catch(e){}
+    }
+
+    // openYouTubePlayer rebuilt (mantive lógica segura de origin + enablejsapi)
+    // (já declarado acima — mantive para consistência)
+    // -------------------------
+    // sync: quando receber 'sync' do servidor, aplicamos estado (já centralizado em handleSync)
+    // -------------------------
 
     console.log('Frontend pronto — YouTube integrado (sem modal) e botão "Mudar vídeo" com confirmação implementado.');
   </script>
