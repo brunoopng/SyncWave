@@ -1,4 +1,4 @@
-// server.js — adaptado e corrigido para SyncWave (YouTube embed + sincronização confiável)
+// server.js — adaptado para YouTube embed + sincronização via socket.io
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -10,12 +10,10 @@ const axios = require("axios");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  // permissive CORS for local/dev; ajustar em produção
-  cors: { origin: "*" }
-});
+const io = new Server(server);
 
-// ---------- YouTube API key (use process.env em produção) ----------
+// ---------- YouTube API key (fictícia que você pediu para incluir) ----------
+// ATENÇÃO: em produção prefira usar process.env.YT_API_KEY e NÃO expor a chave no frontend.
 const YT_API_KEY = process.env.YT_API_KEY || "AIzaSyDSWsuBjVjknRxnz6GHPMWlnTwFSAsTUf4";
 
 // ---------- uploads dir ----------
@@ -50,7 +48,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // ---------- in-memory storage ----------
 app.locals.rooms = app.locals.rooms || {};         // room -> string (videoPath) OR object { youtube: id, meta }
-app.locals.roomsState = app.locals.roomsState || {}; // room -> { time, playing, serverTimestamp, ts }
+app.locals.roomsState = app.locals.roomsState || {}; // room -> { time, playing, ts }
 app.locals.chatHistory = app.locals.chatHistory || {}; // room -> [messages]
 
 // ---------- helpers ----------
@@ -58,6 +56,7 @@ function sanitizeText(t){
   if (!t) return "";
   return String(t).replace(/</g,"&lt;").replace(/>/g,"&gt;").trim();
 }
+
 function getLocalIPs() {
   const nets = os.networkInterfaces();
   const results = [];
@@ -70,34 +69,22 @@ function getLocalIPs() {
   }
   return results;
 }
-function nowMs(){ return Date.now(); }
-function ensureRoomState(room) {
-  if (!app.locals.roomsState[room]) {
-    const ts = nowMs();
-    app.locals.roomsState[room] = { time: 0, playing: false, serverTimestamp: ts, ts };
-  }
-  return app.locals.roomsState[room];
-}
-function setRoomState(room, time = 0, playing = false) {
-  const ts = nowMs();
-  app.locals.roomsState[room] = { time: Number(time) || 0, playing: !!playing, serverTimestamp: ts, ts };
-  return app.locals.roomsState[room];
-}
 
 // ---------- upload endpoints ----------
 app.post("/upload/:room", (req, res, next) => {
   upload.single("video")(req, res, (err) => {
     if (err) return next(err);
     if (!req.file) {
+      console.log("❌ Upload sem arquivo em /upload/:room");
       return res.status(400).json({ error: "Arquivo não enviado" });
     }
     const room = req.params.room;
     const videoPath = `/videos/${req.file.filename}`;
+    // store as string (legacy behavior for direct uploads)
     app.locals.rooms[room] = videoPath;
-    // reset state for new video: start at 0 paused by default
-    setRoomState(room, 0, false);
+    console.log("✅ Upload salvo:", videoPath, "para sala:", room);
+    // notify room (clients expect 'video-ready' with same payload shape)
     io.to(room).emit("video-ready", videoPath);
-    io.to(room).emit("sync", app.locals.roomsState[room]);
     return res.json({ success: true, video: videoPath });
   });
 });
@@ -106,15 +93,18 @@ app.post("/upload", (req, res, next) => {
   upload.single("video")(req, res, (err) => {
     if (err) return next(err);
     if (!req.file) {
+      console.log("❌ Upload sem arquivo em /upload");
       return res.status(400).json({ error: "Arquivo não enviado" });
     }
     const room = (req.body && req.body.room) || "";
-    if (!room) return res.status(400).json({ error: "Campo 'room' ausente" });
+    if (!room) {
+      console.log("❌ Upload sem room em /upload");
+      return res.status(400).json({ error: "Campo 'room' ausente" });
+    }
     const videoPath = `/videos/${req.file.filename}`;
     app.locals.rooms[room] = videoPath;
-    setRoomState(room, 0, false);
+    console.log("✅ Upload salvo:", videoPath, "para sala:", room);
     io.to(room).emit("video-ready", videoPath);
-    io.to(room).emit("sync", app.locals.roomsState[room]);
     return res.json({ success: true, video: videoPath });
   });
 });
@@ -141,6 +131,7 @@ async function fetchYouTubeMetaServer(id) {
       embeddable: typeof it.status?.embeddable === "boolean" ? !!it.status.embeddable : true,
     };
   } catch (err) {
+    // normalize axios error messages
     const m = (err && err.response && err.response.data) ? JSON.stringify(err.response.data) : (err && err.message ? err.message : String(err));
     throw new Error("YouTube API error: " + m);
   }
@@ -150,43 +141,39 @@ async function fetchYouTubeMetaServer(id) {
 io.on("connection", (socket) => {
   console.log("🔌 socket conectado:", socket.id);
 
+  // simple rate limiter per socket for chat: { lastTs, windowStart, count }
   socket._chatRate = { lastTs: 0, windowStart: Date.now(), count: 0 };
 
-  // create-room: accept optional ack
-  socket.on("create-room", (room, ack) => {
-    if (!room) {
-      if (typeof ack === 'function') ack({ ok: false, error: "room ausente" });
-      return;
-    }
+  // create-room: host explicitly creates a room
+  socket.on("create-room", (room) => {
+    if (!room) return;
     socket.join(room);
     console.log(`👑 ${socket.id} criou a sala ${room}`);
-    ensureRoomState(room);
+    app.locals.roomsState[room] = app.locals.roomsState[room] || { time: 0, playing: false, ts: Date.now() };
+    // if there is already a video (file or youtube object), send it
     if (app.locals.rooms[room]) socket.emit("video-ready", app.locals.rooms[room]);
     socket.emit("sync", app.locals.roomsState[room]);
+    // send chat history
     socket.emit("chat-history", app.locals.chatHistory[room] || []);
+    // emit count
     const size = io.sockets.adapter.rooms.get(room)?.size || 0;
     io.in(room).emit("room-count", size);
-    if (typeof ack === 'function') ack({ ok: true });
   });
 
-  // join-room: accept optional ack
-  socket.on("join-room", (room, ack) => {
-    if (!room) {
-      if (typeof ack === 'function') ack({ ok: false, error: "room ausente" });
-      return;
-    }
+  // join-room: join & receive current video + state + history
+  socket.on("join-room", (room) => {
+    if (!room) return;
     socket.join(room);
     console.log(`👥 ${socket.id} entrou em ${room}`);
     if (app.locals.rooms[room]) socket.emit("video-ready", app.locals.rooms[room]);
-    ensureRoomState(room);
-    socket.emit("sync", app.locals.roomsState[room]);
+    if (app.locals.roomsState[room]) socket.emit("sync", app.locals.roomsState[room]);
     socket.emit("chat-history", app.locals.chatHistory[room] || []);
     const size = io.sockets.adapter.rooms.get(room)?.size || 0;
     io.in(room).emit("room-count", size);
-    if (typeof ack === 'function') ack({ ok: true });
   });
 
-  // youtube: server-side validate + ack
+  // NEW: youtube event -> validate server-side then store as { youtube: id, meta } and broadcast to room
+  // supports optional callback ack as second arg
   socket.on("youtube", async (payload, ack) => {
     try {
       if (!payload || !payload.room) {
@@ -195,16 +182,20 @@ io.on("connection", (socket) => {
       }
       const room = String(payload.room);
       const rawId = (payload.id || payload.youtube || "").toString().trim();
+      // Extract basic ID shape: prefer 11 chars, but be flexible and try to sanitize
       const id = rawId.length === 11 ? rawId : (rawId.split(/[?&]/)[0] || rawId);
-      if (!id || id.length < 8) {
+      if (!id || id.length < 8) { // very permissive check; real validation below via API
+        console.log("⚠️ youtube emit inválido de", socket.id, payload);
         if (typeof ack === 'function') ack({ ok: false, error: "ID inválido" });
         return;
       }
 
+      // Validate/lookup metadata on server using YouTube Data API
       let meta;
       try {
         meta = await fetchYouTubeMetaServer(id);
       } catch (err) {
+        console.warn("YT validation failed for id", id, "err:", err.message || err);
         if (typeof ack === 'function') ack({ ok: false, error: "Vídeo inválido ou erro YouTube API: " + (err.message || String(err)) });
         return;
       }
@@ -214,13 +205,13 @@ io.on("connection", (socket) => {
         return;
       }
 
+      // store object so new joiners get same shape
       app.locals.rooms[room] = { youtube: id, meta };
-      // reset state for new video
-      setRoomState(room, 0, false);
 
+      // broadcast to room
       io.to(room).emit("video-ready", { youtube: id, meta });
+      // also emit a convenience 'youtube' event (your client listens to this too)
       io.to(room).emit("youtube", { id, room, from: socket.id, meta });
-      io.to(room).emit("sync", app.locals.roomsState[room]);
 
       console.log(`▶️ YouTube ${id} validado e enviado para sala ${room} por ${socket.id}`);
 
@@ -231,77 +222,21 @@ io.on("connection", (socket) => {
     }
   });
 
-  // latency-check: quick server time ack for RTT measurement
-  socket.on("latency-check", (payload, ack) => {
-    if (typeof ack === 'function') {
-      ack({ serverTime: nowMs() });
-    }
+  // control: unified control from clients -> server marks ts and broadcasts authoritative sync
+  socket.on("control", ({ room, time, playing }) => {
+    if (!room) return;
+    const ts = Date.now();
+    app.locals.roomsState[room] = { time: Number(time) || 0, playing: !!playing, ts };
+    io.in(room).emit("sync", app.locals.roomsState[room]);
+    console.log(`📡 control from ${socket.id} for ${room} => time=${time}, playing=${playing}, ts=${ts}`);
   });
 
-  // request-host-state: return authoritative state for room (ack)
-  socket.on("request-host-state", (payload, ack) => {
-    try {
-      const room = payload && payload.room ? String(payload.room) : null;
-      if (!room) {
-        if (typeof ack === 'function') ack({ ok: false, error: "room ausente" });
-        return;
-      }
-      const state = app.locals.roomsState[room] || null;
-      if (!state) {
-        if (typeof ack === 'function') ack({ ok: false, error: "sem estado disponível" });
-        return;
-      }
-      // Return a copy and include serverTimestamp for clients
-      const hostState = {
-        time: Number(state.time) || 0,
-        playing: !!state.playing,
-        serverTimestamp: state.serverTimestamp || state.ts || nowMs()
-      };
-      if (typeof ack === 'function') ack({ ok: true, hostState });
-    } catch (err) {
-      console.error("request-host-state error", err);
-      if (typeof ack === 'function') ack({ ok: false, error: String(err) });
-    }
-  });
-
-  // request-sync: request server to emit the current sync to the room
-  socket.on("request-sync", (payload, ack) => {
-    try {
-      const room = payload && payload.room ? String(payload.room) : null;
-      if (!room) {
-        if (typeof ack === 'function') ack({ ok: false, error: "room ausente" });
-        return;
-      }
-      const state = app.locals.roomsState[room] || ensureRoomState(room);
-      io.to(room).emit("sync", state);
-      if (typeof ack === 'function') ack({ ok: true, state });
-    } catch (err) {
-      console.error("request-sync error", err);
-      if (typeof ack === 'function') ack({ ok: false, error: String(err) });
-    }
-  });
-
-  // control: client sends desired time/playing -> server becomes source-of-truth and broadcasts 'sync'
-  socket.on("control", ({ room, time, playing, ts }) => {
-    try {
-      if (!room) return;
-      // Normalize values
-      const t = Number(time) || 0;
-      const p = !!playing;
-      const serverTs = nowMs();
-      app.locals.roomsState[room] = { time: t, playing: p, serverTimestamp: serverTs, ts: serverTs };
-      io.in(room).emit("sync", app.locals.roomsState[room]);
-      console.log(`📡 control from ${socket.id} for ${room} => time=${t}, playing=${p}, ts=${serverTs}`);
-    } catch (err) {
-      console.error("control handler error", err);
-    }
-  });
-
-  // chat-message with rate limit & sanitization
+  // chat-message with simple rate limit & sanitization
   socket.on("chat-message", (payload) => {
     try {
       if (!payload || !payload.room || !payload.text) return;
       const room = payload.room;
+      // rate limit: max 12 messages per 10 seconds per socket
       const now = Date.now();
       const rate = socket._chatRate;
       if (now - rate.windowStart > 10000) { rate.windowStart = now; rate.count = 0; }
@@ -332,12 +267,14 @@ io.on("connection", (socket) => {
     }
   });
 
+  // clear-chat (authorized only if needed - here open)
   socket.on("clear-chat", (room) => {
     if (!room) return;
     app.locals.chatHistory[room] = [];
     io.in(room).emit("chat-cleared");
   });
 
+  // update room counts on disconnecting
   socket.on("disconnecting", () => {
     const rooms = Array.from(socket.rooms || []).filter(r => r !== socket.id);
     rooms.forEach(r => {
@@ -365,7 +302,7 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// ---------- start ----------
+// ---------- start (bind em 0.0.0.0 e log automático de IPs) ----------
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
 
