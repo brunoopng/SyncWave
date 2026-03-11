@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -43,13 +44,11 @@
     .placeholder p{margin:0;font-size:13px;color:rgba(255,255,255,0.85)}
 
     /* video element */
-    video{ position:absolute; inset:0; z-index:2; width:100%; height:100%; display:none; background:#000; /* changed to cover to fill área sem barras pretas */ object-fit:contain; border-radius:12px; }
+    video{ position:absolute; inset:0; z-index:2; width:100%; height:100%; display:none; background:#000; object-fit:contain; border-radius:12px; }
 
     /* container used for youtube player iframe */
     #yt-player { position:absolute; inset:0; z-index:2; width:100%; height:100%; display:none; border-radius:12px; overflow:hidden; background:#000; }
 
-/* NOTE: iframe inside #yt-player cannot be styled from inside, but this rule ensures the iframe element itself fills the container.
-   pointer-events:none evita que o overlay do YouTube capture cliques — o controle passa a ser apenas pelo overlay do seu site. */
     #yt-player > div > iframe,
     #yt-player iframe {
       position:absolute;
@@ -309,15 +308,12 @@
       border: 0;
       box-shadow: 0 10px 22px rgba(255,77,121,0.18);
     }
-    /* hover/press */
     #changeVideoBtn:hover {
       transform: translateY(-3px) scale(1.02);
       background: var(--pink-2);
     }
-    /* foco / teclado */
     #changeVideoBtn:focus { outline: 0; box-shadow: 0 10px 28px rgba(255,77,121,0.22); transform: translateY(-2px) }
 
-    /* pequena animação de pulso quando há vídeo carregado (usar via JS: add class 'pulse') */
     @keyframes pulseGlow {
       0% { box-shadow: 0 8px 18px rgba(255,77,121,0.12); transform: translateY(0) scale(1); }
       50% { box-shadow: 0 18px 36px rgba(255,77,121,0.18); transform: translateY(-2px) scale(1.01); }
@@ -341,7 +337,6 @@
 
         <div class="top-actions">
           <div class="room-controls">
-            <!-- NOVO: botão Mudar vídeo (visível apenas quando um vídeo está carregado) -->
             <button id="changeVideoBtn" class="btn">Mudar vídeo</button>
 
             <input id="roomInput" type="text" placeholder="Nome da sala (ex: sala123)" />
@@ -367,10 +362,8 @@
                   <button id="uploadBtn" class="btn primary" disabled>Enviar</button>
                 </div>
 
-                <!-- YouTube agora é um botão idêntico ao 'Selecionar vídeo' e sem modal -->
                 <div style="margin-top:10px;">
                   <button id="youtubeBtn" class="file-label" title="Adicionar vídeo do YouTube">
-                    <!-- youtube svg -->
                     <svg viewBox="0 0 24 24" width="18" height="18" style="filter:drop-shadow(0 2px 6px rgba(0,0,0,0.12));">
                       <path fill="#fff" d="M10 15l5.2-3L10 9v6z"></path>
                       <path fill="#fff" d="M21.8 8s-.2-1.6-.8-2.3c-.8-.9-1.7-.9-2.1-1-2.9-.2-7.2-.2-7.2-.2s-4.3 0-7.2.2c-.4.1-1.3.1-2.1 1C2.4 6.4 2.2 8 2.2 8S2 9.9 2 11.8v.4c0 1.9.2 3.8.2 3.8s.2 1.6.8 2.3c.8.9 1.9.9 2.4 1 1.7.1 7.2.2 7.2.2s4.3 0 7.2-.2c.4-.1 1.3-.1 2.1-1 .6-.7.8-2.3.8-2.3s.2-1.9.2-3.8v-.4c0-1.9-.2-3.8-.2-3.8z"/>
@@ -427,19 +420,15 @@
               </div>
             </div>
 
-            <!-- Quality control (three dots) - appears only when video is loaded -->
             <div class="video-topbar" aria-hidden="true">
               <div class="quality-control" id="qualityControl" hidden>
                 <button id="qualityBtn" class="qc-btn" aria-haspopup="true" aria-expanded="false" title="Qualidade do vídeo">
                   <span class="dots" aria-hidden="true">⋯</span>
                 </button>
 
-                <div class="qc-menu" id="qualityMenu" role="menu" aria-hidden="true">
-                  <!-- items injected dynamically -->
-                </div>
+                <div class="qc-menu" id="qualityMenu" role="menu" aria-hidden="true"></div>
               </div>
             </div>
-            <!-- END -->
           </div>
         </div>
 
@@ -486,7 +475,15 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    // elements
+    // =============================
+    // CONFIG
+    // =============================
+    // Se quiser que apenas o host controle, mude para false. Aqui permitimos controle bidirecional (host <-> convidados).
+    const ALLOW_GUEST_CONTROL = true;
+
+    // =============================
+    // ELEMENTS & STATE
+    // =============================
     const socket = io();
     const roomInput = document.getElementById('roomInput');
     const createBtn = document.getElementById('createBtn');
@@ -506,13 +503,11 @@
     const videoInner = document.getElementById('videoInner');
     const changeVideoBtn = document.getElementById('changeVideoBtn');
 
-    // quality elements
     const qualityControl = document.getElementById('qualityControl');
     const qualityBtn = document.getElementById('qualityBtn');
     const qualityMenu = document.getElementById('qualityMenu');
     const qualityLabel = document.getElementById('qualityLabel');
 
-    // controls
     const controlsOverlay = document.getElementById('controlsOverlay');
     const playBtn = document.getElementById('playBtn');
     const ctlPlay = document.getElementById('ctlPlay');
@@ -527,12 +522,10 @@
     const currentTimeEl = document.getElementById('currentTime');
     const durationEl = document.getElementById('duration');
 
-    // modal nickname elements
     const nickModal = document.getElementById('nickModal');
     const nickInput = document.getElementById('nickInput');
     const nickSaveBtn = document.getElementById('nickSaveBtn');
 
-    // youtube & top buttons
     const youtubeBtn = document.getElementById('youtubeBtn');
 
     let nickname = '';
@@ -570,11 +563,12 @@
     let ytApiReady = false;
     let ytPollInterval = null;
 
-    // NEW: confirmation mode state for "Mudar vídeo" -> "Enviar (temporário)"
+    // change mode / pending
     let changeMode = false;
-    let pendingFile = null;           // File object waiting to be uploaded on confirmation
-    let pendingYouTube = null;        // { id, raw } waiting to be sent on confirmation
+    let pendingFile = null;
+    let pendingYouTube = null;
 
+    // sync/latency helper
     function nowMs(){ return Date.now(); }
     function logStatus(t){ statusEl.textContent = t; }
     function safeEmit(event, payload){
@@ -616,12 +610,10 @@
       controlsOverlay.setAttribute('aria-hidden','true');
     }
 
-    // helper: centraliza visibilidade do botão 'Mudar vídeo'
     function showChangeBtn(show) {
       if (!changeVideoBtn) return;
       if (show) {
         changeVideoBtn.style.display = 'inline-flex';
-        // small attention pulse when it first appears
         changeVideoBtn.classList.add('pulse');
         setTimeout(()=> changeVideoBtn.classList.remove('pulse'), 3000);
       } else {
@@ -630,12 +622,10 @@
       }
     }
 
-    // helper: enter/exit confirm mode
     function enterConfirmMode() {
       changeMode = true;
       changeVideoBtn.textContent = 'Enviar (temporário)';
       changeVideoBtn.classList.add('primary');
-      // ensure visible
       showChangeBtn(true);
     }
     function exitConfirmMode() {
@@ -644,7 +634,6 @@
       pendingYouTube = null;
       changeVideoBtn.textContent = 'Mudar vídeo';
       changeVideoBtn.classList.remove('primary');
-      // keep visible if there's an active video, else hide
       const hasVideo = !!(isYouTube || (video && video.src));
       showChangeBtn(hasVideo);
       uploadStatus.textContent = '';
@@ -659,11 +648,7 @@
     }
 
     // -------------------------
-    // setVideo accepts:
-    //  - null -> clears
-    //  - string -> direct video url
-    //  - object: { video: url } (same as before)
-    //  - object: { youtube: "<id>" } -> youtube id
+    // setVideo (mantive sua lógica)
     // -------------------------
     function setVideo(src){
       clearYouTubePlayerInterval();
@@ -672,7 +657,6 @@
       qualitiesMap = null;
       originalSrc = null;
 
-      // clear previous youtube ui
       function cleanupVideoElement(){
         try { video.pause(); } catch(e){}
         try { video.removeAttribute('src'); video.load(); } catch(e){}
@@ -697,14 +681,11 @@
         hideControlsNow();
         if (qualityControl) { qualityControl.hidden = true; qualityControl.setAttribute('aria-hidden','true'); }
         qualityLabel.textContent = 'Qualidade: -';
-        // hide change video button
         showChangeBtn(false);
         return;
       }
 
-      // If server sent an object with youtube id
       if (typeof src === 'object' && src !== null && src.youtube) {
-        // youtube mode
         const id = src.youtube;
         originalSrc = 'youtube:' + id;
         cleanupVideoElement();
@@ -712,12 +693,10 @@
         openYouTubePlayer(id);
         qualityLabel.textContent = 'Qualidade: YouTube';
         placeholder.style.display = 'none';
-        // show change video button (since a video is present)
         showChangeBtn(true);
         return;
       }
 
-      // legacy: object containing video url
       if (typeof src === 'object' && src !== null && src.video) {
         videoUrl = src.video;
         if (src.qualities && typeof src.qualities === 'object') {
@@ -730,7 +709,6 @@
         return;
       }
 
-      // normal <video> flow (existing)
       originalSrc = videoUrl;
 
       if (qualitiesMap && !qualitiesMap['original']) {
@@ -748,7 +726,6 @@
         currentQuality = 'Auto';
       }
 
-      // ensure youtube cleaned
       if (ytPlayer && typeof ytPlayer.destroy === 'function') {
         try { ytPlayer.destroy(); } catch(e){}
       }
@@ -775,8 +752,6 @@
         populateQualityMenu();
       }
       qualityLabel.textContent = 'Qualidade: ' + currentQuality;
-
-      // show change video button now that a normal video is loaded
       showChangeBtn(true);
     }
 
@@ -825,8 +800,6 @@
         }
         updatePlayPauseUI();
         video.removeEventListener('loadedmetadata', resume);
-        // ALTERADO: após trocar qualidade, notificar servidor do tempo/estado para manter a sincronização.
-        try { sendControl(!video.paused); } catch(e){}
       };
       video.addEventListener('loadedmetadata', resume);
 
@@ -837,7 +810,6 @@
       });
     }
 
-    // menu open/close
     function openQualityMenu(){
       qualityMenu.classList.add('visible');
       qualityBtn.setAttribute('aria-expanded', 'true');
@@ -875,10 +847,8 @@
 
     function updatePlayPauseUI(){
       if (isYouTube) {
-        // get state from ytPlayer if available
         try {
           const st = ytPlayer && typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : null;
-          // YT states: -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued
           if (st === 1) {
             ctlPlay.style.display = 'none';
             ctlPause.style.display = 'block';
@@ -901,62 +871,154 @@
       }
     }
 
-    // -------------------------
-    // sync emit
-    // -------------------------
+    // =============================
+    // SYNCING LAYER
+    // =============================
+    // lastKnownHostState is the last authoritative state we received via sync (or request)
+    let applyingRemote = false;
+    let lastKnownHostState = null;
+    const GUEST_DRIFT_THRESHOLD = 0.8; // seconds
+    const HEARTBEAT_INTERVAL = 2000;   // ms
+    let guestCorrectionInterval = null;
+
+    // sendControl: sends 'control' event (host or guest)
     function sendControl(playing){
       if (!room) return;
-      if (syncing) return;
+      // debounce short-circuit
+      const tNow = nowMs();
+      if (tNow - lastEmit < DEBOUNCE_MS) return;
+      lastEmit = tNow;
+
       let time = 0;
       if (isYouTube && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
-        time = ytPlayer.getCurrentTime();
+        try { time = ytPlayer.getCurrentTime(); } catch(e){ time = 0; }
       } else {
         time = video.currentTime || 0;
       }
-      const payload = { room, time: time, playing: !!playing, ts: nowMs(), client: socket.id, host: !!isHost };
-      safeEmit('control', payload);
+      const payload = { room, time: time, playing: !!playing, ts: nowMs(), from: socket.id };
 
-      // ALTERADO: se o cliente NÃO é host, pedir ao servidor o estado autorizado (request-sync) logo em seguida.
-      // Isso corrige casos em que o servidor considera o host a única fonte de verdade:
-      // o guest emite sua intenção e pede a sincronização oficial — evita perder a referência.
-      if (!isHost) {
-        setTimeout(()=> { try { safeEmit('request-sync', { room, ts: nowMs(), client: socket.id }); } catch(e){} }, 250);
+      // If guests are not allowed to control, revert local and ask server for authoritative state.
+      if (!isHost && !ALLOW_GUEST_CONTROL) {
+        // notify server (optional)
+        safeEmit('guest-action', { room, action: { type: 'attempt-control', payload }});
+        // request authoritative state
+        requestAndApplyHostState();
+        return;
+      }
+
+      // If allowed (host or guests allowed), emit
+      safeEmit('control', payload);
+    }
+
+    // measure RTT via server ack 'latency-check' (server should reply with serverTime)
+    function measureLatency() {
+      return new Promise((resolve) => {
+        const t0 = Date.now();
+        try {
+          socket.emit('latency-check', null, (res) => {
+            const rtt = Date.now() - t0;
+            resolve({ rtt, serverTime: res && res.serverTime ? res.serverTime : Date.now() });
+          });
+        } catch (e) {
+          resolve({ rtt: 300, serverTime: Date.now() });
+        }
+      });
+    }
+
+    // request host state via ack (server must support 'request-host-state' for best result)
+    function requestAndApplyHostState() {
+      if (!room) return;
+      try {
+        socket.emit('request-host-state', { room }, (res) => {
+          if (!res || !res.ok || !res.hostState) {
+            // fallback: wait short time for an incoming 'sync' from server
+            return;
+          }
+          lastKnownHostState = res.hostState;
+          applyHostStateToLocal(res.hostState);
+        });
+      } catch (e) {
+        // ignore
       }
     }
 
-    // -------------------------
-    // chat & socket handlers
-    // -------------------------
-    socket.on('connect', () => { logStatus('Conectado'); console.log('socket conectado', socket.id); });
-    socket.on('video-ready', (src) => {
-      // server may send { youtube: id } or a string/url or object { video: url }
-      setVideo(src);
-      logStatus('Vídeo disponível');
-    });
-    socket.on('youtube', (data) => {
-      if (data && (data.id || data.youtube)) setVideo({ youtube: data.id || data.youtube });
-    });
+    async function applyHostStateToLocal(hostState) {
+      if (!hostState) return;
+      applyingRemote = true;
+      try {
+        // try a latency measure for best compensation (non-blocking path)
+        const { rtt } = await measureLatency().catch(()=>({ rtt: 300 }));
+        const oneWayMs = rtt / 2;
+        const nowClient = Date.now();
+        const elapsedSinceServerMs = Math.max(0, nowClient - (hostState.serverTimestamp || nowClient));
+        const adjustedMs = (hostState.time * 1000) + elapsedSinceServerMs + oneWayMs;
+        const adjustedSec = adjustedMs / 1000;
 
-    socket.on('room-count', n => { roomCount.textContent = (n || 0) + ' pessoas assistindo'; });
+        if (isYouTube && ytPlayer && typeof ytPlayer.seekTo === 'function') {
+          try { ytPlayer.seekTo(adjustedSec, true); } catch(e){}
+          if (hostState.playing) {
+            setTimeout(()=>{ try{ ytPlayer.playVideo(); }catch(e){} }, Math.max(0, oneWayMs));
+          } else {
+            try { ytPlayer.pauseVideo(); } catch(e){}
+          }
+        } else if (video) {
+          try { video.currentTime = adjustedSec; } catch(e){}
+          if (hostState.playing) {
+            const p = video.play();
+            if (p && p.then) p.catch(()=>{});
+          } else {
+            try { video.pause(); } catch(e){}
+          }
+        }
+        updatePlayPauseUI();
+        updateProgressUI();
+      } finally {
+        setTimeout(()=> applyingRemote = false, 350);
+      }
+    }
 
-    // ALTERADO: chat-history -> mantém autoscroll coerente e preserva histórico rolável.
-    socket.on('chat-history', hist => {
-      messages.innerHTML='';
-      if (Array.isArray(hist)) hist.forEach(m=> appendMessage(m));
-      // tentativa de deixar o scroll no final ao carregar histórico
-      try { messages.scrollTop = messages.scrollHeight; } catch(e){}
-    });
+    // called right after joining a room
+    async function syncOnJoin() {
+      if (!room) return;
+      // if host, broadcast current state immediately (server should rebroadcast)
+      if (isHost) {
+        const time = (isYouTube && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') ? ytPlayer.getCurrentTime() : (video.currentTime || 0);
+        safeEmit('control', { room, time, playing: (isYouTube ? (ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState() === YT.PlayerState.PLAYING) : (!video.paused && !video.ended)), ts: nowMs(), from: socket.id });
+        return;
+      }
 
-    socket.on('chat-message', msg => appendMessage(msg));
-    socket.on('chat-cleared', ()=> messages.innerHTML='');
-    socket.on('chat-error', e => alert(e?.error || 'Erro no chat'));
+      // guest: try to request authoritative state
+      try {
+        const { rtt } = await measureLatency();
+        const oneWayMs = rtt / 2;
+        // try request-host-state - if server doesn't support, wait for incoming 'sync'
+        socket.emit('request-host-state', { room }, (res) => {
+          if (!res || !res.ok || !res.hostState) {
+            // fallback: ask server to send the last known sync
+            socket.emit('request-sync', { room });
+            return;
+          }
+          lastKnownHostState = res.hostState;
+          applyHostStateToLocal(lastKnownHostState);
+        });
+        // also proactively ask for sync in case server only supports that
+        socket.emit('request-sync', { room });
+      } catch (e) {
+        console.warn('syncOnJoin fallback', e);
+        socket.emit('request-sync', { room });
+      }
+    }
 
-    // ALTERADO: centralizei a rotina de aplicar sync em handleSync e escuto tanto 'sync' quanto 'control' (alguns servidores emitem 'control' pro broadcast)
-    function handleSync(payload) {
+    // handle incoming authoritative sync from server (server may broadcast 'sync' when someone emits 'control')
+    socket.on('sync', (payload) => {
       if (!payload || typeof payload.ts !== 'number') return;
       if (payload.ts <= lastAppliedTs) return;
       lastAppliedTs = payload.ts;
-      syncing = true;
+      // store lastKnownHostState for corrections
+      lastKnownHostState = payload;
+      // avoid self-trigger loops
+      if (applyingRemote) return;
+      applyingRemote = true;
       try {
         if (isYouTube && ytPlayer) {
           const localTime = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
@@ -968,400 +1030,118 @@
           } else {
             try { ytPlayer.pauseVideo(); } catch(e){}
           }
-          syncing = false;
         } else {
-          if (Math.abs(video.currentTime - payload.time) > SEEK_THRESHOLD) {
+          if (Math.abs((video.currentTime || 0) - payload.time) > SEEK_THRESHOLD) {
             try { video.currentTime = payload.time; } catch(e){}
           }
           if (payload.playing) {
             const p = video.play();
-            if (p && p.then) p.then(()=> syncing=false).catch(()=> syncing=false);
-            else syncing=false;
+            if (p && p.then) p.catch(()=>{});
           } else {
             try { video.pause(); } catch(e){}
-            syncing=false;
           }
         }
-      } catch(e) { console.error(e); syncing=false; }
-    }
-    // original listener replaced to call handleSync
-    socket.on('sync', handleSync);
-    // ALTERADO: também escutar 'control' vindo do servidor (alguns backends re-broadcastam com esse nome)
-    socket.on('control', handleSync);
-
-    // UI actions: create/join
-    createBtn.addEventListener('click', () => {
-      const r = roomInput.value.trim(); if (!r) return alert('Digite o nome da sala');
-      room = r; isHost = true; askNick();
-      socket.emit('create-room', room);
-      // ALTERADO: pedir sync logo após criar a sala para garantir estado inicial
-      try { safeEmit('request-sync', { room, ts: nowMs(), client: socket.id }); } catch(e){}
-      uploadAreaShow(true); roomTitle.textContent = 'Sala ' + room; logStatus('Você é host — envie o vídeo');
+      } catch(e) { console.error(e); }
+      setTimeout(()=> applyingRemote = false, 300);
     });
 
-    joinBtn.addEventListener('click', () => {
-      const r = roomInput.value.trim(); if (!r) return alert('Digite o nome da sala');
-      room = r; isHost = false; askNick();
-      socket.emit('join-room', room);
-      // ALTERADO: solicitar estado atual ao servidor (sync) assim que entrar
-      try { safeEmit('request-sync', { room, ts: nowMs(), client: socket.id }); } catch(e){}
-      uploadAreaShow(false); roomTitle.textContent = 'Sala ' + room; logStatus('Entrou na sala — aguardando vídeo');
+    // If server sends video-ready / youtube etc (existing behavior)
+    socket.on('video-ready', (src) => {
+      setVideo(src);
+      logStatus('Vídeo disponível');
+    });
+    socket.on('youtube', (data) => {
+      if (data && (data.id || data.youtube)) setVideo({ youtube: data.id || data.youtube });
     });
 
-    function uploadAreaShow(show){
-      const ua = document.querySelector('.upload-area');
-      if(!ua) return;
-      ua.style.display = show ? 'flex' : 'none';
-      if (!show) {
-        fileInput.value = '';
-        uploadStatus.textContent = '';
-        uploadBtn.disabled = true;
-      }
-    }
-    uploadAreaShow(false);
+    socket.on('room-count', n => { roomCount.textContent = (n || 0) + ' pessoas assistindo'; });
+    socket.on('chat-history', hist => { messages.innerHTML=''; if (Array.isArray(hist)) hist.forEach(m=> appendMessage(m)); });
+    socket.on('chat-message', msg => appendMessage(msg));
+    socket.on('chat-cleared', ()=> messages.innerHTML='');
+    socket.on('chat-error', e => alert(e?.error || 'Erro no chat'));
 
-    // file input handler:
-    fileInput.addEventListener('change', () => {
-      const f = fileInput.files[0];
-      if (!f) {
-        uploadStatus.textContent = '';
-        uploadBtn.disabled = true;
-        // if in changeMode, clear pendingFile
-        if (changeMode) {
-          pendingFile = null;
-          uploadStatus.textContent = 'Nenhum arquivo selecionado.';
+    socket.on('connect', () => { logStatus('Conectado'); console.log('socket conectado', socket.id); });
+
+    // host-disconnected fallback
+    socket.on('host-disconnected', () => {
+      try { if (isYouTube && ytPlayer) ytPlayer.pauseVideo(); else if (video) video.pause(); } catch(e){}
+      statusEl.textContent = 'Host saiu — reprodução pausada';
+    });
+
+    // start guest correction loop
+    function startGuestCorrectionLoop(){
+      if (guestCorrectionInterval) clearInterval(guestCorrectionInterval);
+      guestCorrectionInterval = setInterval(() => {
+        if (!lastKnownHostState || isHost || applyingRemote) return;
+        const expected = lastKnownHostState.time + ((Date.now() - (lastKnownHostState.serverTimestamp || Date.now())) / 1000);
+        if (isYouTube && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+          try {
+            const local = ytPlayer.getCurrentTime();
+            const drift = Math.abs(local - expected);
+            if (drift > GUEST_DRIFT_THRESHOLD) applyHostStateToLocal(lastKnownHostState);
+          } catch(e){}
+        } else if (video) {
+          try {
+            const local = video.currentTime || 0;
+            const drift = Math.abs(local - expected);
+            if (drift > GUEST_DRIFT_THRESHOLD) applyHostStateToLocal(lastKnownHostState);
+          } catch(e){}
         }
-        return;
-      }
-      const sizeMB = (f.size / (1024*1024));
-      uploadStatus.textContent = `${f.name} (${fmtSize(f.size)}) — pronto para envio`;
-      uploadBtn.disabled = false;
+      }, HEARTBEAT_INTERVAL + 200);
+    }
+    startGuestCorrectionLoop();
 
-      // If we're in confirm (change) flow, set pendingFile instead of auto-sending
-      if (changeMode) {
-        pendingFile = f;
-        // keep file in input (we'll upload when user clicks "Enviar (temporário)")
-        uploadStatus.textContent = `Arquivo selecionado: ${f.name} (${fmtSize(f.size)}). Clique em "Enviar (temporário)" para aplicar à sala.`;
-      }
-    });
-
-    // regular uploadBtn click (legacy direct upload) remains available
-    if (uploadBtn) {
-      uploadBtn.addEventListener('click', async () => {
-        const f = fileInput.files[0];
-        if (!f) return alert('Escolha um arquivo antes de enviar');
-        if (!room) return alert('Crie a sala primeiro');
-        uploadBtn.disabled = true;
-        uploadStatus.textContent = 'Enviando...';
-        const fd = new FormData(); fd.append('video', f); fd.append('room', room);
-        try {
-          let res = await fetch(`/upload/${encodeURIComponent(room)}`, { method:'POST', body: fd });
-          if (!res.ok) {
-            console.warn('/upload/:room falhou', res.status);
-            res = await fetch('/upload', { method:'POST', body: fd });
-          }
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          const json = await res.json();
-
-          // NORMALIZA o objeto de vídeo que será usado localmente e emitido
-          let payload;
-          if (typeof json === 'string') {
-            payload = { video: json };
-          } else if (json && json.video) {
-            payload = json;
-          } else if (json && typeof json === 'object') {
-            payload = json;
+    // prevent guests from seeking directly by clicking progress if ALLOW_GUEST_CONTROL == false,
+    // if ALLOW_GUEST_CONTROL == true we allow clicks and emit 'control'
+    progress.addEventListener('click', (e)=>{
+      const rect = progress.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, x / rect.width));
+      if (isYouTube && ytPlayer) {
+        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        if (dur > 0) {
+          const target = pct * dur;
+          try {
+            if (!isHost && !ALLOW_GUEST_CONTROL) {
+              safeEmit('guest-action', { room, action: { type: 'attempt-seek', target, ts: nowMs() }});
+              if (lastKnownHostState) applyHostStateToLocal(lastKnownHostState);
+              else requestAndApplyHostState();
+            } else {
+              // guest is allowed to control -> seek locally and inform server
+              try { ytPlayer.seekTo(target, true); } catch(e){}
+              sendControl(!(!ytPlayer || ytPlayer.getPlayerState() !== YT.PlayerState.PLAYING));
+            }
+          } catch(e){}
+        }
+      } else {
+        if (isFinite(video.duration)) {
+          const target = pct * video.duration;
+          if (!isHost && !ALLOW_GUEST_CONTROL) {
+            safeEmit('guest-action', { room, action: { type: 'attempt-seek', target, ts: nowMs() }});
+            if (lastKnownHostState) applyHostStateToLocal(lastKnownHostState);
+            else requestAndApplyHostState();
           } else {
-            throw new Error('Resposta inválida do servidor');
+            try { video.currentTime = target; } catch(e){}
+            sendControl(!video.paused);
           }
-
-          // aplica localmente (setVideo aceita string ou objeto { video: url, ... })
-          try {
-            if (payload.video) setVideo(payload);
-            else setVideo(payload);
-          } catch(e){ console.warn('setVideo fallback', e); }
-
-          // status UI
-          uploadStatus.textContent = 'Upload concluído';
-          logStatus('Upload OK — vídeo disponível');
-          fileInput.value = '';
-          uploadBtn.disabled = true;
-
-          // EMITE PARA O SERVIDOR COM A SALA (garante broadcast)
-          try {
-            socket.emit('video-ready', { room, video: payload }, (ack) => {
-              if (ack && ack.ok) console.log('server ack video-ready');
-            });
-          } catch (err) {
-            try { socket.emit('video-ready', payload); } catch(_) { console.warn('emit video-ready falhou', _); }
-          }
-
-        } catch (err) {
-          console.error('Erro upload', err);
-          uploadStatus.textContent = 'Erro no upload';
-          alert('Erro no upload: ' + (err.message || err));
-          uploadBtn.disabled = false;
         }
-      });
-    }
-
-    // -------------------------
-    // YouTube simple flow (PROMPT, sem modal)
-    // -------------------------
-    function extractYouTubeID(input){
-      if (!input) return null;
-      input = String(input).trim().replace(/[<>]/g,'');
-      const regex = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
-      const m = input.match(regex);
-      if (m && m[1]) return m[1];
-      if (/^[A-Za-z0-9_-]{11}$/.test(input)) return input;
-      try {
-        const q = (new URLSearchParams((input.split('?')[1]||''))).get('v');
-        if (q && /^[A-Za-z0-9_-]{11}$/.test(q)) return q;
-      } catch(e){}
-      return null;
-    }
-
-    const YT_API_KEY = 'AIzaSyDSWsuBjVjknRxnz6GHPMWlnTwFSAsTUf4'; // SUA API KEY (atenção: exposta no cliente)
-
-    function isoDurationToSeconds(iso) {
-      if (!iso) return 0;
-      const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-      if (!m) return 0;
-      const h = parseInt(m[1] || 0, 10);
-      const min = parseInt(m[2] || 0, 10);
-      const s = parseInt(m[3] || 0, 10);
-      return h * 3600 + min * 60 + s;
-    }
-    function fmtTimeFromSeconds(sec) {
-      sec = Math.max(0, Math.floor(sec || 0));
-      const m = Math.floor(sec / 60);
-      const s = sec % 60;
-      return m + ':' + (s < 10 ? '0' + s : s);
-    }
-
-    async function fetchYouTubeMeta(id) {
-      const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,status&id=${encodeURIComponent(id)}&key=${YT_API_KEY}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('YouTube API error: ' + res.status);
-      const json = await res.json();
-      if (!json.items || !json.items.length) throw new Error('Vídeo não encontrado');
-      const it = json.items[0];
-      return {
-        id,
-        title: it.snippet.title,
-        channelTitle: it.snippet.channelTitle,
-        thumbnails: it.snippet.thumbnails,
-        durationISO: it.contentDetails ? it.contentDetails.duration : null,
-        durationSec: it.contentDetails ? isoDurationToSeconds(it.contentDetails.duration) : 0,
-        embeddable: it.status ? !!it.status.embeddable : true
-      };
-    }
-
-    // youtubeBtn (legacy) still opens prompt and sets immediately
-    youtubeBtn.addEventListener('click', async () => {
-      if (!room) return alert('Crie a sala primeiro');
-      const raw = prompt('Cole a URL do YouTube ou o ID (11 caracteres):');
-      if (!raw) return;
-      const id = extractYouTubeID(raw);
-      if (!id) {
-        uploadStatus.textContent = 'ID inválido.';
-        return;
       }
-      uploadStatus.textContent = 'Carregando informações...';
-      try {
-        const meta = await fetchYouTubeMeta(id);
-        if (!meta.embeddable) {
-          uploadStatus.textContent = 'Este vídeo não permite incorporação.';
-          showUnembeddableUI(id, 150);
-          return;
-        }
-        try {
-          socket.emit('youtube', { room, url: raw, id, meta }, (resp) => {
-            if (!resp || !resp.ok) {
-              uploadStatus.textContent = 'Erro ao adicionar vídeo: ' + (resp && resp.error ? resp.error : 'sem resposta do servidor');
-              return;
-            }
-            setVideo({ youtube: id });
-            logStatus('Vídeo do YouTube carregado (servidor confirmou)');
-          });
-        } catch (e) {
-          console.warn('socket emit youtube failed', e);
-          setVideo({ youtube: id });
-          logStatus('Vídeo do YouTube carregado (aplicado localmente)');
-        }
-      } catch (err) {
-        console.warn('fetchYouTubeMeta failed', err);
-        uploadStatus.textContent = 'Não foi possível obter informações do vídeo. Verifique a URL/ID ou a quota da API.';
-      }
+      showControlsTemporarily();
+      e.stopPropagation();
     });
 
-    // CHANGE VIDEO FLOW (new)
-    changeVideoBtn.addEventListener('click', async (e) => {
-      if (!isHost) {
-        return alert('Apenas o host pode mudar o vídeo');
-      }
-
-      // If not in change/confirm mode: activate it and open chooser
-      if (!changeMode) {
-        enterConfirmMode();
-
-        // quick chooser: OK -> YouTube, Cancel -> arquivo local
-        const wantYT = confirm('Deseja trocar por um vídeo do YouTube?\nOK = YouTube, Cancel = enviar um arquivo local.');
-        if (wantYT) {
-          if (!room) {
-            uploadStatus.textContent = 'Crie a sala primeiro.';
-            return;
-          }
-          const raw = prompt('Cole a URL do YouTube ou o ID (11 caracteres):');
-          if (!raw) {
-            // user cancelled prompt
-            pendingYouTube = null;
-            uploadStatus.textContent = 'Operação cancelada pelo usuário. Clique em "Enviar (temporário)" para aplicar (nenhum vídeo) ou feche.';
-            return;
-          }
-          const id = extractYouTubeID(raw);
-          if (!id) {
-            uploadStatus.textContent = 'ID inválido.';
-            pendingYouTube = null;
-            return;
-          }
-          // store pending YouTube (will be sent only when user clicks "Enviar (temporário)")
-          pendingYouTube = { id, raw };
-          pendingFile = null;
-          uploadStatus.textContent = `Pronto: ${raw} — clique em "Enviar (temporário)" para aplicar o vídeo a sala ${room}.`;
-          return;
-        } else {
-          // file flow: reveal upload area and open file selector
-          uploadAreaShow(true);
-          setTimeout(()=> {
-            try { fileInput.click(); } catch(err){ console.warn('Não foi possível abrir seletor de arquivos diretamente', err); uploadStatus.textContent = 'Selecione um arquivo manualmente.'; }
-          }, 140);
-          uploadStatus.textContent = 'Selecione um arquivo. Após escolher, clique em "Enviar (temporário)".';
-          return;
-        }
-      }
-
-      // If already in confirm mode: act as "Enviar (temporário)" button
-      if (changeMode) {
-        // PRIORITY: pendingYouTube -> send YT; else pendingFile -> upload file; else alert
-        if (pendingYouTube) {
-          // try to validate meta then emit
-          uploadStatus.textContent = 'Enviando vídeo do YouTube...';
-          try {
-            const meta = await fetchYouTubeMeta(pendingYouTube.id).catch(()=>null);
-            if (meta && !meta.embeddable) {
-              uploadStatus.textContent = 'Este vídeo não permite incorporação.';
-              showUnembeddableUI(pendingYouTube.id, 150);
-              return;
-            }
-            // emit to server with room; handle ack if provided
-            try {
-              socket.emit('youtube', { room, url: pendingYouTube.raw, id: pendingYouTube.id, meta }, (resp) => {
-                if (resp && resp.ok) {
-                  setVideo({ youtube: pendingYouTube.id });
-                  logStatus('Vídeo do YouTube carregado (servidor confirmou)');
-                } else {
-                  setVideo({ youtube: pendingYouTube.id });
-                  logStatus('Vídeo do YouTube carregado (aplicado localmente)');
-                }
-                pendingYouTube = null;
-                exitConfirmMode();
-              });
-            } catch (err) {
-              console.warn('emit youtube falhou', err);
-              setVideo({ youtube: pendingYouTube.id });
-              logStatus('Vídeo do YouTube carregado (aplicado localmente)');
-              pendingYouTube = null;
-              exitConfirmMode();
-            }
-          } catch (err) {
-            console.warn('Erro ao enviar YouTube', err);
-            uploadStatus.textContent = 'Falha ao enviar vídeo do YouTube.';
-          }
-          return;
-        }
-
-        if (pendingFile) {
-          // upload file to server under room, same as uploadBtn flow
-          if (!room) { uploadStatus.textContent = 'Crie a sala primeiro.'; return; }
-          uploadStatus.textContent = 'Enviando arquivo para o servidor...';
-          const fd = new FormData();
-          fd.append('video', pendingFile);
-          fd.append('room', room);
-          try {
-            let res = await fetch(`/upload/${encodeURIComponent(room)}`, { method: 'POST', body: fd });
-            if (!res.ok) {
-              console.warn('/upload/:room falhou', res.status);
-              res = await fetch('/upload', { method:'POST', body: fd });
-            }
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const json = await res.json();
-
-            let payload;
-            if (typeof json === 'string') payload = { video: json };
-            else if (json && json.video) payload = json;
-            else if (json && typeof json === 'object') payload = json;
-            else throw new Error('Resposta inválida do servidor');
-
-            // Apply locally and emit to room
-            try { if (payload.video) setVideo(payload); else setVideo(payload); } catch(e){ console.warn('setVideo fallback', e); }
-
-            uploadStatus.textContent = 'Upload concluído e enviado à sala.';
-            logStatus('Upload OK — vídeo disponível');
-            fileInput.value = '';
-            pendingFile = null;
-
-            try {
-              socket.emit('video-ready', { room, video: payload }, (ack) => {
-                if (ack && ack.ok) console.log('server ack video-ready');
-              });
-            } catch (err) {
-              try { socket.emit('video-ready', payload); } catch(_) { console.warn('emit video-ready falhou', _); }
-            }
-
-            exitConfirmMode();
-          } catch (err) {
-            console.error('Erro upload (confirm)', err);
-            uploadStatus.textContent = 'Erro no upload';
-            alert('Erro no upload: ' + (err.message || err));
-          }
-          return;
-        }
-
-        // no pending selection
-        alert('Nenhum vídeo selecionado. Escolha um arquivo (clicando no seletor) ou informe um YouTube antes de enviar.');
-      }
+    // attach listeners (play/pause/seeked) - these trigger sendControl
+    video.addEventListener('timeupdate', updateProgressUI);
+    video.addEventListener('loadedmetadata', ()=> {
+      durationEl.textContent = fmtTime(video.duration);
+      updateProgressUI();
+      updatePlayPauseUI();
     });
+    video.addEventListener('play', ()=> { updatePlayPauseUI(); sendControl(true); });
+    video.addEventListener('pause', ()=> { updatePlayPauseUI(); sendControl(false); });
+    video.addEventListener('seeked', ()=> { updateProgressUI(); sendControl(!video.paused); });
 
-    // If user selects a file while in confirm mode, pendingFile is already set in fileInput listener.
-    // If user selects a file outside confirm mode (legacy), uploadBtn handles immediate upload.
-
-    function escapeHtml(s){ if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-    function formatTime(ts){ const d = new Date(ts); return d.toLocaleTimeString(); }
-
-    // ALTERADO: autoscroll do chat — só rola para baixo se o usuário já estiver perto do final.
-    function appendMessage(msg){
-      const el = document.createElement('div'); el.className = 'msg' + (msg.user === nickname ? ' mine' : '');
-      el.innerHTML = `<strong style="font-size:12px">${escapeHtml(msg.user)}</strong><div style="margin-top:6px">${escapeHtml(msg.text)}</div><div style="font-size:11px;color:#999;margin-top:6px">${formatTime(msg.ts || Date.now())}</div>`;
-      // detect if user is near bottom
-      const atBottom = (messages.scrollHeight - messages.clientHeight - messages.scrollTop) < 80;
-      messages.appendChild(el);
-      if (atBottom) { messages.scrollTop = messages.scrollHeight; } // only auto-scroll if user was at/bottom
-    }
-
-    sendBtn.addEventListener('click', sendChat);
-    chatInput.addEventListener('keypress', (e)=> { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
-
-    function sendChat(){
-      const txt = chatInput.value.trim(); if (!txt) return; if (!room) return alert('Entre em uma sala primeiro');
-      socket.emit('chat-message', { room, user: nickname || 'Guest', text: txt, ts: nowMs() });
-      chatInput.value='';
-    }
-
-    // -------------------------
-    // YouTube API helpers (mantive fetch/meta helpers)
-    // -------------------------
+    // YouTube helpers (load API & create player)
     function loadYouTubeAPI(){
       return new Promise((resolve) => {
         if (ytApiReady) return resolve();
@@ -1395,7 +1175,6 @@
       try { socket.emit('chat-message', { room, user: 'System', text: `Vídeo não incorporável: ${link}`, ts: Date.now() }); } catch(e){}
     }
 
-    // openYouTubePlayer rebuilt (mantive lógica segura de origin + enablejsapi)
     function openYouTubePlayer(id){
       isYouTube = true;
       clearYouTubePlayerInterval();
@@ -1410,7 +1189,6 @@
       wrapper.id = 'yt-wrapper-' + iframeId;
 
       const origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
-      // ADJUSTED: add controls=0 and iv_load_policy=3 to reduce YouTube overlays and annotations.
       const src = 'https://www.youtube.com/embed/' + encodeURIComponent(id) +
                   '?enablejsapi=1&controls=0&iv_load_policy=3&rel=0&modestbranding=1&playsinline=1&autoplay=1&origin=' + encodeURIComponent(origin);
 
@@ -1419,7 +1197,6 @@
       iframe.width = '100%';
       iframe.height = '100%';
       iframe.frameBorder = '0';
-      // keep autoplay and fullscreen permissions but we disable pointer events so the iframe UI doesn't capture clicks
       iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
       iframe.allowFullscreen = true;
       iframe.src = src;
@@ -1428,8 +1205,6 @@
       iframe.style.height = '100%';
       iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
 
-      // Prevent iframe from capturing pointer events so your overlay is the only interactive UI.
-      // The player is still controllable via the YT API (postMessage) from this page.
       try { iframe.style.pointerEvents = 'none'; } catch (e) { /* ignore */ }
 
       wrapper.appendChild(iframe);
@@ -1440,7 +1215,6 @@
 
       loadYouTubeAPI().then(()=> {
         try {
-          // NOTE: playerVars.controls set to 0 to hide YouTube's built-in controls so only our overlay is visible.
           ytPlayer = new YT.Player(iframeId, {
             videoId: id,
             playerVars: {
@@ -1467,13 +1241,23 @@
               },
               onStateChange: (e) => {
                 updatePlayPauseUI();
+                // if this client is host, we should emit a control update
                 if (isHost) {
                   const playing = (e.data === YT.PlayerState.PLAYING);
                   sendControl(playing);
                 } else {
-                  // ALTERADO: when a guest triggers state change (e.g. via our overlay), we still emit and request authoritative sync.
-                  const playing = (e.data === YT.PlayerState.PLAYING);
-                  sendControl(playing);
+                  // guest: if not applyingRemote, they attempted to change — if guests allowed, we emit control; else revert
+                  if (!applyingRemote) {
+                    if (ALLOW_GUEST_CONTROL) {
+                      // guest allowed to control -> emit control to server (will be rebroadcast)
+                      const playing = (e.data === YT.PlayerState.PLAYING);
+                      sendControl(playing);
+                    } else {
+                      // revert to authoritative state
+                      if (lastKnownHostState) applyHostStateToLocal(lastKnownHostState);
+                      else requestAndApplyHostState();
+                    }
+                  }
                 }
               },
               onError: (e) => {
@@ -1519,18 +1303,44 @@
     }
 
     // -------------------------
-    // CONTROLS (play/seek/mute/forward/back)
+    // UI interactions (play/seek controls)
     // -------------------------
+    async function togglePlay(){
+      if (isYouTube) {
+        if (!ytPlayer) return;
+        const st = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+        if (st === 1) {
+          ytPlayer.pauseVideo();
+          sendControl(false);
+        } else {
+          ytPlayer.playVideo();
+          sendControl(true);
+        }
+        updatePlayPauseUI();
+        showControlsTemporarily();
+        return;
+      }
+
+      if (video.paused || video.ended) {
+        const p = video.play();
+        if (p && p.then) p.catch(()=>{});
+      } else {
+        video.pause();
+      }
+      updatePlayPauseUI();
+      showControlsTemporarily();
+    }
+
     playBtn.addEventListener('click', (e)=>{ togglePlay(); e.stopPropagation(); });
     backBtn.addEventListener('click', (e)=> {
       if (isYouTube && ytPlayer) {
         const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
-        ytPlayer.seekTo(Math.max(0, cur - 10), true);
-        // ALTERADO: notificar servidor após alteração de seek via botão
-        try { sendControl(!false); } catch(e){}
+        const target = Math.max(0, cur - 10);
+        try { ytPlayer.seekTo(target, true); } catch(e){}
+        sendControl(true);
       } else {
         video.currentTime = Math.max(0, video.currentTime - 10);
-        try { sendControl(!video.paused); } catch(e){}
+        sendControl(!video.paused);
       }
       showControlsTemporarily(); e.stopPropagation();
     });
@@ -1538,12 +1348,12 @@
       if (isYouTube && ytPlayer) {
         const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
         const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : cur;
-        ytPlayer.seekTo(Math.min(dur, cur + 10), true);
-        // ALTERADO: notificar servidor após alteração de seek via botão
-        try { sendControl(!false); } catch(e){}
+        const target = Math.min(dur, cur + 10);
+        try { ytPlayer.seekTo(target, true); } catch(e){}
+        sendControl(true);
       } else {
         video.currentTime = Math.min((video.duration||0), video.currentTime + 10);
-        try { sendControl(!video.paused); } catch(e){}
+        sendControl(!video.paused);
       }
       showControlsTemporarily(); e.stopPropagation();
     });
@@ -1611,39 +1421,6 @@
       durationEl.textContent = fmtTime(video.duration);
     }
 
-    progress.addEventListener('click', (e)=>{
-      const rect = progress.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const pct = Math.max(0, Math.min(1, x / rect.width));
-      if (isYouTube && ytPlayer) {
-        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
-        if (dur > 0) {
-          ytPlayer.seekTo(pct * dur, true);
-          // ALTERADO: after guest/host seek via progress, emit control to server
-          try { sendControl(true); } catch(e){}
-        }
-      } else {
-        if (isFinite(video.duration)) {
-          video.currentTime = pct * video.duration;
-          // ALTERADO: after local video seek, emit control
-          try { sendControl(!video.paused); } catch(e){}
-        }
-      }
-      showControlsTemporarily();
-      e.stopPropagation();
-    });
-
-    video.addEventListener('timeupdate', updateProgressUI);
-    video.addEventListener('loadedmetadata', ()=> {
-      durationEl.textContent = fmtTime(video.duration);
-      updateProgressUI();
-      updatePlayPauseUI();
-    });
-    // ALTERADO: play/pause/seek events já emitem controle — mantive, mas sendControl agora pede request-sync para guests
-    video.addEventListener('play', ()=> { updatePlayPauseUI(); sendControl(true); });
-    video.addEventListener('pause', ()=> { updatePlayPauseUI(); sendControl(false); });
-    video.addEventListener('seeked', ()=> { updateProgressUI(); sendControl(!video.paused); });
-
     videoInner.addEventListener('mousemove', (e)=>{ showControlsTemporarily(); });
     videoInner.addEventListener('touchstart', ()=> showControlsTemporarily());
 
@@ -1655,49 +1432,377 @@
     });
 
     // -------------------------
-    // YouTube API helpers (mantive fetch/meta helpers)
+    // Back-end integrations & upload flows (existing code from part2)
     // -------------------------
-    function loadYouTubeAPI(){
-      return new Promise((resolve) => {
-        if (ytApiReady) return resolve();
-        if (window.YT && window.YT.Player) {
-          ytApiReady = true; return resolve();
+    function escapeHtml(s){ if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function formatTime(ts){ const d = new Date(ts); return d.toLocaleTimeString(); }
+    function appendMessage(msg){
+      const el = document.createElement('div'); el.className = 'msg' + (msg.user === nickname ? ' mine' : '');
+      el.innerHTML = `<strong style="font-size:12px">${escapeHtml(msg.user)}</strong><div style="margin-top:6px">${escapeHtml(msg.text)}</div><div style="font-size:11px;color:#999;margin-top:6px">${formatTime(msg.ts || Date.now())}</div>`;
+      messages.appendChild(el); messages.scrollTop = messages.scrollHeight;
+    }
+
+    sendBtn.addEventListener('click', sendChat);
+    chatInput.addEventListener('keypress', (e)=> { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
+
+    function sendChat(){
+      const txt = chatInput.value.trim(); if (!txt) return; if (!room) return alert('Entre em uma sala primeiro');
+      socket.emit('chat-message', { room, user: nickname || 'Guest', text: txt, ts: nowMs() });
+      chatInput.value='';
+    }
+
+    // create/join flows - call syncOnJoin after ack (if ack supported)
+    createBtn.addEventListener('click', () => {
+      const r = roomInput.value.trim(); if (!r) return alert('Digite o nome da sala');
+      room = r; isHost = true; askNick();
+      // emit with optional ack
+      try {
+        socket.emit('create-room', room, (res) => {
+          uploadAreaShow(true); roomTitle.textContent = 'Sala ' + room; logStatus('Você é host — envie o vídeo');
+          setTimeout(()=> syncOnJoin(), 200);
+        });
+      } catch(e){
+        // fallback if server doesn't support ack
+        socket.emit('create-room', room);
+        uploadAreaShow(true); roomTitle.textContent = 'Sala ' + room; logStatus('Você é host — envie o vídeo');
+        setTimeout(()=> syncOnJoin(), 400);
+      }
+    });
+
+    joinBtn.addEventListener('click', () => {
+      const r = roomInput.value.trim(); if (!r) return alert('Digite o nome da sala');
+      room = r; isHost = false; askNick();
+      try {
+        socket.emit('join-room', room, (res) => {
+          uploadAreaShow(false); roomTitle.textContent = 'Sala ' + room; logStatus('Entrou na sala — aguardando vídeo');
+          setTimeout(()=> syncOnJoin(), 200);
+        });
+      } catch(e){
+        socket.emit('join-room', room);
+        uploadAreaShow(false); roomTitle.textContent = 'Sala ' + room; logStatus('Entrou na sala — aguardando vídeo');
+        setTimeout(()=> syncOnJoin(), 400);
+      }
+    });
+
+    function uploadAreaShow(show){
+      const ua = document.querySelector('.upload-area');
+      if(!ua) return;
+      ua.style.display = show ? 'flex' : 'none';
+      if (!show) {
+        fileInput.value = '';
+        uploadStatus.textContent = '';
+        uploadBtn.disabled = true;
+      }
+    }
+    uploadAreaShow(false);
+
+    // file input handler:
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files[0];
+      if (!f) {
+        uploadStatus.textContent = '';
+        uploadBtn.disabled = true;
+        if (changeMode) {
+          pendingFile = null;
+          uploadStatus.textContent = 'Nenhum arquivo selecionado.';
         }
-        const tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        tag.async = true;
-        document.head.appendChild(tag);
-        window.onYouTubeIframeAPIReady = function(){
-          ytApiReady = true;
-          resolve();
-        };
-        setTimeout(()=> {
-          if (!ytApiReady && window.YT && window.YT.Player) { ytApiReady = true; resolve(); }
-        }, 3000);
+        return;
+      }
+      uploadStatus.textContent = `${f.name} (${fmtSize(f.size)}) — pronto para envio`;
+      uploadBtn.disabled = false;
+      if (changeMode) {
+        pendingFile = f;
+        uploadStatus.textContent = `Pronto: ${f.name} (${fmtSize(f.size)}). Clique em "Enviar (temporário)" para aplicar à sala ${room}.`;
+      }
+    });
+
+    if (uploadBtn) {
+      uploadBtn.addEventListener('click', async () => {
+        const f = fileInput.files[0];
+        if (!f) return alert('Escolha um arquivo antes de enviar');
+        if (!room) return alert('Crie a sala primeiro');
+        uploadBtn.disabled = true;
+        uploadStatus.textContent = 'Enviando...';
+        const fd = new FormData(); fd.append('video', f); fd.append('room', room);
+        try {
+          let res = await fetch(`/upload/${encodeURIComponent(room)}`, { method:'POST', body: fd });
+          if (!res.ok) {
+            console.warn('/upload/:room falhou', res.status);
+            res = await fetch('/upload', { method:'POST', body: fd });
+          }
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const json = await res.json();
+
+          let payload;
+          if (typeof json === 'string') {
+            payload = { video: json };
+          } else if (json && json.video) {
+            payload = json;
+          } else if (json && typeof json === 'object') {
+            payload = json;
+          } else {
+            throw new Error('Resposta inválida do servidor');
+          }
+
+          try {
+            if (payload.video) setVideo(payload);
+            else setVideo(payload);
+          } catch(e){ console.warn('setVideo fallback', e); }
+
+          uploadStatus.textContent = 'Upload concluído';
+          logStatus('Upload OK — vídeo disponível');
+          fileInput.value = '';
+          uploadBtn.disabled = true;
+
+          try {
+            socket.emit('video-ready', { room, video: payload }, (ack) => { if (ack && ack.ok) console.log('server ack video-ready'); });
+          } catch (err) {
+            try { socket.emit('video-ready', payload); } catch(_) { console.warn('emit video-ready falhou', _); }
+          }
+
+        } catch (err) {
+          console.error('Erro upload', err);
+          uploadStatus.textContent = 'Erro no upload';
+          alert('Erro no upload: ' + (err.message || err));
+          uploadBtn.disabled = false;
+        }
       });
     }
 
-    function showUnembeddableUI(id, code){
-      ytContainer.style.display = 'none';
-      placeholder.style.display = 'flex';
-      const link = `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
-      const msg = document.createElement('div');
-      msg.style.color = '#fff';
-      msg.style.textAlign = 'center';
-      msg.innerHTML = `<div style="margin-bottom:8px">Este vídeo não permite incorporação (código ${code}).</div><a href="${link}" target="_blank" rel="noopener" style="background:#fff;color:#000;padding:8px 12px;border-radius:8px;text-decoration:none">Abrir no YouTube</a>`;
-      uploadStatus.innerHTML = '';
-      uploadStatus.appendChild(msg);
-      try { socket.emit('chat-message', { room, user: 'System', text: `Vídeo não incorporável: ${link}`, ts: Date.now() }); } catch(e){}
+    // -------------------------
+    // YouTube flows (part2 code)
+    // -------------------------
+    function extractYouTubeID(input){
+      if (!input) return null;
+      input = String(input).trim().replace(/[<>]/g,'');
+      const regex = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
+      const m = input.match(regex);
+      if (m && m[1]) return m[1];
+      if (/^[A-Za-z0-9_-]{11}$/.test(input)) return input;
+      try {
+        const q = (new URLSearchParams((input.split('?')[1]||''))).get('v');
+        if (q && /^[A-Za-z0-9_-]{11}$/.test(q)) return q;
+      } catch(e){}
+      return null;
     }
 
-    // openYouTubePlayer rebuilt (mantive lógica segura de origin + enablejsapi)
-    // (já declarado acima — mantive para consistência)
-    // -------------------------
-    // sync: quando receber 'sync' do servidor, aplicamos estado (já centralizado em handleSync)
-    // -------------------------
+    const YT_API_KEY = 'AIzaSyDSWsuBjVjknRxnz6GHPMWlnTwFSAsTUf4'; // sua chave - ideal mover para servidor
 
-    console.log('Frontend pronto — YouTube integrado (sem modal) e botão "Mudar vídeo" com confirmação implementado.');
+    function isoDurationToSeconds(iso) {
+      if (!iso) return 0;
+      const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+      if (!m) return 0;
+      const h = parseInt(m[1] || 0, 10);
+      const min = parseInt(m[2] || 0, 10);
+      const s = parseInt(m[3] || 0, 10);
+      return h * 3600 + min * 60 + s;
+    }
+    function fmtTimeFromSeconds(sec) {
+      sec = Math.max(0, Math.floor(sec || 0));
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      return m + ':' + (s < 10 ? '0' + s : s);
+    }
+
+    async function fetchYouTubeMeta(id) {
+      const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,status&id=${encodeURIComponent(id)}&key=${YT_API_KEY}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('YouTube API error: ' + res.status);
+      const json = await res.json();
+      if (!json.items || !json.items.length) throw new Error('Vídeo não encontrado');
+      const it = json.items[0];
+      return {
+        id,
+        title: it.snippet.title,
+        channelTitle: it.snippet.channelTitle,
+        thumbnails: it.snippet.thumbnails,
+        durationISO: it.contentDetails ? it.contentDetails.duration : null,
+        durationSec: it.contentDetails ? isoDurationToSeconds(it.contentDetails.duration) : 0,
+        embeddable: it.status ? !!it.status.embeddable : true
+      };
+    }
+
+    youtubeBtn.addEventListener('click', async () => {
+      if (!room) return alert('Crie a sala primeiro');
+      const raw = prompt('Cole a URL do YouTube ou o ID (11 caracteres):');
+      if (!raw) return;
+      const id = extractYouTubeID(raw);
+      if (!id) {
+        uploadStatus.textContent = 'ID inválido.';
+        return;
+      }
+      uploadStatus.textContent = 'Carregando informações...';
+      try {
+        const meta = await fetchYouTubeMeta(id);
+        if (!meta.embeddable) {
+          uploadStatus.textContent = 'Este vídeo não permite incorporação.';
+          showUnembeddableUI(id, 150);
+          return;
+        }
+        try {
+          socket.emit('youtube', { room, url: raw, id, meta }, (resp) => {
+            if (!resp || !resp.ok) {
+              uploadStatus.textContent = 'Erro ao adicionar vídeo: ' + (resp && resp.error ? resp.error : 'sem resposta do servidor');
+              return;
+            }
+            setVideo({ youtube: id });
+            logStatus('Vídeo do YouTube carregado (servidor confirmou)');
+          });
+        } catch (e) {
+          console.warn('socket emit youtube failed', e);
+          setVideo({ youtube: id });
+          logStatus('Vídeo do YouTube carregado (aplicado localmente)');
+        }
+      } catch (err) {
+        console.warn('fetchYouTubeMeta failed', err);
+        uploadStatus.textContent = 'Não foi possível obter informações do vídeo. Verifique a URL/ID ou a quota da API.';
+      }
+    });
+
+    // CHANGE VIDEO FLOW (new)
+    changeVideoBtn.addEventListener('click', async (e) => {
+      if (!isHost) {
+        return alert('Apenas o host pode mudar o vídeo');
+      }
+
+      if (!changeMode) {
+        enterConfirmMode();
+        const wantYT = confirm('Deseja trocar por um vídeo do YouTube?\nOK = YouTube, Cancel = enviar um arquivo local.');
+        if (wantYT) {
+          if (!room) {
+            uploadStatus.textContent = 'Crie a sala primeiro.';
+            return;
+          }
+          const raw = prompt('Cole a URL do YouTube ou o ID (11 caracteres):');
+          if (!raw) {
+            pendingYouTube = null;
+            uploadStatus.textContent = 'Operação cancelada pelo usuário. Clique em "Enviar (temporário)" para aplicar (nenhum vídeo) ou feche.';
+            return;
+          }
+          const id = extractYouTubeID(raw);
+          if (!id) {
+            uploadStatus.textContent = 'ID inválido.';
+            pendingYouTube = null;
+            return;
+          }
+          pendingYouTube = { id, raw };
+          pendingFile = null;
+          uploadStatus.textContent = `Pronto: ${raw} — clique em "Enviar (temporário)" para aplicar o vídeo a sala ${room}.`;
+          return;
+        } else {
+          uploadAreaShow(true);
+          setTimeout(()=> {
+            try { fileInput.click(); } catch(err){ console.warn('Não foi possível abrir seletor de arquivos diretamente', err); uploadStatus.textContent = 'Selecione um arquivo manualmente.'; }
+          }, 140);
+          uploadStatus.textContent = 'Selecione um arquivo. Após escolher, clique em "Enviar (temporário)".';
+          return;
+        }
+      }
+
+      if (changeMode) {
+        if (pendingYouTube) {
+          uploadStatus.textContent = 'Enviando vídeo do YouTube...';
+          try {
+            const meta = await fetchYouTubeMeta(pendingYouTube.id).catch(()=>null);
+            if (meta && !meta.embeddable) {
+              uploadStatus.textContent = 'Este vídeo não permite incorporação.';
+              showUnembeddableUI(pendingYouTube.id, 150);
+              return;
+            }
+            try {
+              socket.emit('youtube', { room, url: pendingYouTube.raw, id: pendingYouTube.id, meta }, (resp) => {
+                if (resp && resp.ok) {
+                  setVideo({ youtube: pendingYouTube.id });
+                  logStatus('Vídeo do YouTube carregado (servidor confirmou)');
+                } else {
+                  setVideo({ youtube: pendingYouTube.id });
+                  logStatus('Vídeo do YouTube carregado (aplicado localmente)');
+                }
+                pendingYouTube = null;
+                exitConfirmMode();
+              });
+            } catch (err) {
+              console.warn('emit youtube falhou', err);
+              setVideo({ youtube: pendingYouTube.id });
+              logStatus('Vídeo do YouTube carregado (aplicado localmente)');
+              pendingYouTube = null;
+              exitConfirmMode();
+            }
+          } catch (err) {
+            console.warn('Erro ao enviar YouTube', err);
+            uploadStatus.textContent = 'Falha ao enviar vídeo do YouTube.';
+          }
+          return;
+        }
+
+        if (pendingFile) {
+          if (!room) { uploadStatus.textContent = 'Crie a sala primeiro.'; return; }
+          uploadStatus.textContent = 'Enviando arquivo para o servidor...';
+          const fd = new FormData();
+          fd.append('video', pendingFile);
+          fd.append('room', room);
+          try {
+            let res = await fetch(`/upload/${encodeURIComponent(room)}`, { method: 'POST', body: fd });
+            if (!res.ok) {
+              console.warn('/upload/:room falhou', res.status);
+              res = await fetch('/upload', { method:'POST', body: fd });
+            }
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const json = await res.json();
+
+            let payload;
+            if (typeof json === 'string') payload = { video: json };
+            else if (json && json.video) payload = json;
+            else if (json && typeof json === 'object') payload = json;
+            else throw new Error('Resposta inválida do servidor');
+
+            try { if (payload.video) setVideo(payload); else setVideo(payload); } catch(e){ console.warn('setVideo fallback', e); }
+
+            uploadStatus.textContent = 'Upload concluído e enviado à sala.';
+            logStatus('Upload OK — vídeo disponível');
+            fileInput.value = '';
+            pendingFile = null;
+
+            try {
+              socket.emit('video-ready', { room, video: payload }, (ack) => { if (ack && ack.ok) console.log('server ack video-ready'); });
+            } catch (err) {
+              try { socket.emit('video-ready', payload); } catch(_) { console.warn('emit video-ready falhou', _); }
+            }
+
+            exitConfirmMode();
+          } catch (err) {
+            console.error('Erro upload (confirm)', err);
+            uploadStatus.textContent = 'Erro no upload';
+            alert('Erro no upload: ' + (err.message || err));
+          }
+          return;
+        }
+
+        alert('Nenhum vídeo selecionado. Escolha um arquivo (clicando no seletor) ou informe um YouTube antes de enviar.');
+      }
+    });
+
+    // -------------------------
+    // YouTube local state guard (prevent guest from breaking if not allowed)
+    // -------------------------
+    // If guests try to manipulate YouTube via other means, we handle in onStateChange above.
+    // Also small poll to update UI
+    setInterval(()=>{
+      try { updateProgressUI(); } catch(e){}
+    }, 500);
+
+    // -------------------------
+    // Helpers (quality, etc.)
+    // -------------------------
+    function fmtSize(bytes){
+      if (!bytes) return '0 B';
+      const units = ['B','KB','MB','GB'];
+      let i=0; let v=bytes;
+      while(v>=1024 && i<units.length-1){ v/=1024; i++; }
+      return v.toFixed(i===0?0:2) + ' ' + units[i];
+    }
+
+    console.log('Frontend pronto — SyncWave (sync patch aplicado).');
   </script>
 </body>
 </html>
-
