@@ -11,9 +11,11 @@
       --bg1:#FAEDF0;--bg2:#FFF5F7;
       --fg:#111; --muted:#8D99AE;
       --pink:#FF4D79;--pink-2:#FF2E63;
-      --card: rgba(255,255,255,0.85);--glass-border: rgba(255,255,255,0.5);
+      --card: rgba(255,255,255,0.95);
+      --glass-border: rgba(0,0,0,0.06);
       --chat-bg: #fff; --msg-bg: #F8F9FA; --handle-bg: #fff;
       --video-bg: #000;
+      --lobby-bg-panel: rgba(255,255,255,0.98);
       --max-width:1200px;--radius:24px;
       --control-size:42px;
       --control-bg: rgba(0,0,0,0.35);
@@ -28,13 +30,18 @@
       --bg1: #0f1720; --bg2: #071016;
       --fg: #E6EEF3; --muted:#A6B3BD;
       --card: rgba(8,12,16,0.64); --glass-border: rgba(255,255,255,0.04);
-      --chat-bg: rgba(10,14,18,0.5); --msg-bg: rgba(255,255,255,0.03);
+      --chat-bg: rgba(10,14,18,0.6); --msg-bg: rgba(255,255,255,0.03);
       --handle-bg: #111;
       --video-bg: #000;
       --control-bg: rgba(255,255,255,0.06);
       --control-fg: #fff;
       --pink: #FF6F99; --pink-2: #FF4D7A;
+      --lobby-bg-panel: rgba(6,10,14,0.6);
     }
+
+    /* Avoid flash: start hidden, reveal only after entering a room */
+    .app.initial-hidden { visibility: hidden; opacity: 0; pointer-events: none; transition: visibility 0s linear 0s, opacity 180ms ease; }
+    .app.revealed { visibility: visible; opacity: 1; pointer-events: auto; transition: opacity 180ms ease; }
 
     /* global smooth transitions for themeable properties */
     * { box-sizing:border-box; margin:0; padding:0; font-family:'Plus Jakarta Sans',system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial }
@@ -66,10 +73,9 @@
       backdrop-filter: blur(12px); transition: background var(--theme-transition) ease, box-shadow var(--theme-transition) ease, border-color var(--theme-transition) ease;
     }
 
-    /* ====== CORREÇÃO CRUCIAL: garantir que flex parents permitam filhos com overflow sem expandir ======
-       Essas regras evitam que a coluna direita cresça indefinidamente quando .messages aumenta. */
+    /* ====== CORREÇÃO CRUCIAL: garantir que flex parents permitam filhos com overflow sem expandir ====== */
     .app, .left, .right, .player-wrap, .chat {
-      min-height: 0; /* permite que filhos com overflow encolham corretamente dentro do flex container */
+      min-height: 0;
     }
 
     .left{padding:32px;display:flex;flex-direction:column;gap:20px}
@@ -80,7 +86,7 @@
 
     .top-actions{display:flex;gap:10px;align-items:center}
     .btn{border:0;padding:10px 16px;border-radius:999px;font-weight:600;cursor:pointer;display:inline-flex;gap:8px;align-items:center;justify-content:center;transition:all .18s ease}
-    .btn.primary{background:var(--pink);color:#fff;box-shadow:0 8px 18px rgba(255,77,121,0.18)}
+    .btn.primary{Background:var(--pink);color:#fff;box-shadow:0 8px 18px rgba(255,77,121,0.18)}
     .btn.primary:hover{transform:translateY(-3px);background:var(--pink-2)}
     .btn.ghost{background:rgba(255,255,255,0.9);color:var(--pink);border:1px solid rgba(255,77,121,0.08)}
 
@@ -165,10 +171,10 @@
     .chat{flex:1;background:var(--chat-bg);padding:14px;border-radius:14px;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,0.03); transition: background var(--theme-transition) ease; }
     /* IMPORTANT: .messages deve ser um flex item com overflow interno sem forçar o pai a crescer */
     .messages{
-      flex: 1 1 auto;        /* ocupar espaço disponível, mas poder encolher */
-      min-height: 0;         /* crucial para flex children com overflow */
-      max-height: 100%;      /* não ultrapassar o container pai */
-      overflow: auto;        /* rolagem interna */
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: 100%;
+      overflow: auto;
       display:flex;
       flex-direction:column;
       gap:10px;
@@ -221,7 +227,7 @@
 
     .controls-left{display:flex;gap:8px;align-items:center}
     .controls-center{flex:1;display:flex;align-items:center;gap:12px;padding:0 8px}
-    .controls-right{display:flex;gap:8px;align-items:center}
+    .controls-right{display:flex;gap:8px;align-items:center;position:relative}
 
     .btn-ctl{
       width:36px;height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:var(--control-bg);color:var(--control-fg);border:0;
@@ -361,6 +367,7 @@
 
     /* estilos para o botão Mudar vídeo (harmoniza com os outros) */
     #changeVideoBtn {
+      /* start hidden — JS will reveal when appropriate (video present or confirm mode) */
       display: none;
       margin-right: 6px;
       padding: 10px 16px;
@@ -420,13 +427,204 @@
       transition: transform .12s ease, opacity .12s ease;
     }
 
+    /* ===== New: Lobby styles (FULLSCREEN now) ===== */
+    .lobby-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9998;
+      display: none; /* start hidden - we'll open on load by script */
+      align-items: stretch;
+      justify-content: stretch;
+      background: linear-gradient(180deg, rgba(10,10,12,0.28), rgba(10,10,12,0.45));
+      backdrop-filter: blur(6px);
+      padding: 0;
+    }
+    .lobby {
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      border-radius: 0;
+      padding: 28px;
+      box-shadow: none;
+      border: none;
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 18px;
+      /* adapt to theme using CSS variables */
+      background: linear-gradient(180deg, var(--bg2), var(--bg1));
+      overflow: auto;
+    }
+    .lobby-left {
+      display:flex;flex-direction:column;gap:12px;padding-right:12px;
+    }
+
+    /* Lobby header layout: ensure create + close stay together and never overflow */
+    .lobby-header {
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      flex-wrap:nowrap;
+      position: relative;
+    }
+    /* keep title at left and actions at right; actions will be pushed to right by margin-left:auto */
+    .lobby-actions {
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-shrink:0;
+      margin-left:auto; /* pushes to the far right */
+    }
+
+    .search-bar {
+      display:flex;gap:10px;align-items:center;
+    }
+    .search-input {
+      padding:10px 12px;border-radius:12px;border:1px solid var(--glass-border);outline:none;background:transparent;color:var(--fg);min-width:320px;
+      box-shadow: inset 0 1px 0 rgba(0,0,0,0.02);
+    }
+    .create-room-btn {
+      min-width:150px;
+      margin-left:auto;
+    }
+
+    /* group for the action buttons so they stay inline and can wrap neatly */
+    /* .lobby-actions defined above with margin-left:auto to place at top-right */
+
+    .rooms-list {
+      display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:8px;
+    }
+    .room-card {
+      background: linear-gradient(180deg, var(--lobby-bg-panel), var(--lobby-bg-panel));
+      border-radius:14px;padding:12px;border:1px solid var(--glass-border);box-shadow:0 8px 20px rgba(10,10,20,0.04);
+      display:flex;flex-direction:column;gap:8px;
+      color:var(--fg);
+    }
+    .room-name { font-weight:700;color:var(--fg);font-size:14px; }
+    .room-meta { font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px; }
+    .room-actions { margin-top:8px; display:flex;gap:8px;align-items:center;justify-content:flex-end; }
+    .lock { width:18px;height:18px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.04);font-size:12px;color:var(--muted) }
+
+    .lobby-right {
+      background: linear-gradient(180deg, var(--lobby-bg-panel), var(--lobby-bg-panel));
+      border-radius:12px;padding:14px;border:1px solid var(--glass-border);
+      display:flex;flex-direction:column;gap:12px;height:100%;
+      box-shadow:0 18px 40px rgba(10,10,20,0.06);
+      color:var(--fg);
+    }
+    .lobby-empty { color:var(--muted);font-size:13px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.01) }
+
+    .modal-compact { max-width:420px; width:100%; }
+
+    #fecharBtn {
+    display: none;
+    }
+    /* small responsive */
+    @media (max-width:900px){
+      .lobby { grid-template-columns: 1fr; padding:14px; }
+      .search-input { min-width:160px; width:100%;}
+      .rooms-list { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+      /* keep lobby actions accessible on small screens */
+      .lobby-actions { width: 100%; justify-content: flex-end; }
+    }
+
+    /* NEW button: Return to room (safe replacement for old close button)
+       - starts hidden; shown only after create/join
+       - displayed inline next to 'Criar sala' and also has a fixed variant for persistent access
+    */
+    #returnToRoomBtn {
+      display: none !important;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    /* when we want it fixed in corner while in-room */
+    #returnToRoomBtn.return-fixed {
+      position: fixed !important;
+      top: 18px !important;
+      right: 18px !important;
+      z-index: 10001 !important;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    }
+
+    /* ----- Volume control styling ----- */
+    .vol-btn {
+      width:40px;height:40px;border-radius:10px;border:0;display:inline-flex;align-items:center;justify-content:center;
+      background: rgba(0,0,0,0.36); color:var(--control-fg); cursor:pointer; box-shadow:0 8px 20px rgba(0,0,0,0.28);
+      backdrop-filter: blur(6px); transition: transform .12s ease, background .12s;
+    }
+    .vol-btn:hover{ transform:translateY(-3px); background: rgba(0,0,0,0.5); }
+
+    /* Improved vol-menu positioning and animation:
+       - default opens below the button (top: calc(100% + 8px))
+       - if there's not enough space it will add .above and open above (bottom: calc(100% + 8px))
+       - menu is positioned by JS and appended to body or to the fullscreen element to ensure visibility in fullscreen
+    */
+    .vol-menu{
+      position: fixed;             /* JS will toggle between fixed (normal) and absolute (fullscreen) */
+      left: 0; top: 0;             /* will be positioned by JS */
+      min-width:170px;
+      max-width: 260px;
+      width:170px;
+      padding:12px;
+      border-radius:12px;
+      background:rgba(20,20,25,0.95);
+      backdrop-filter: blur(8px);
+      border:1px solid rgba(255,255,255,0.06);
+      box-shadow:0 20px 50px rgba(0,0,0,0.5);
+      transform-origin: top center;
+      transform: translateY(-8px) scale(.96);
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .18s ease, transform .18s ease, left .05s ease, top .05s ease;
+      z-index:2147483647; /* muito alto para evitar ser coberto */
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    /* acima do botão (animação inversa) */
+    .vol-menu.above {
+      transform-origin: bottom center;
+      transform: translateY(8px) scale(.96);
+    }
+
+    /* visível */
+    .vol-menu.visible{
+      opacity:1;
+      transform:translateY(0) scale(1);
+      pointer-events:auto;
+    }
+
+    
+    #openCreateBtn{
+      position: relative;
+  left: 384px;
+}
+    #lobbySearch{
+      position: relative;
+  left: 374px;
+    }
+
+    #fecharBtn {
+      position: relative;
+  left: 394px;
+    }
+
+
+    /* Make the vol-row a full-width container with only the slider inside
+       (we removed the textual label so the slider can stretch edge-to-edge) */
+    .vol-row { display:block; padding:6px 4px; }
+    /* removed label width; if a label exists it will be visually hidden to avoid layout jumps */
+    .vol-row label { position: absolute !important; width:1px !important; height:1px !important; overflow:hidden !important; clip:rect(1px,1px,1px,1px) !important; white-space:nowrap !important; }
+    .vol-slider { display:block; width:100%; -webkit-appearance:none; appearance:none; height:6px; border-radius:999px; background: linear-gradient(90deg,var(--pink),var(--pink-2)); outline:none; }
+    .vol-slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px;height:14px;border-radius:50%; background:#fff; box-shadow:0 6px 12px rgba(0,0,0,0.12); cursor:pointer; }
+    .vol-icon-small { width:18px;height:18px; display:inline-block; }
+
   </style>
 </head>
 <body>
   <div class="blob blob-1"></div>
   <div class="blob blob-2"></div>
 
-  <div class="app" role="application" id="appRoot">
+  <!-- app starts hidden to avoid visual flash; will be revealed after entering/creating a room -->
+  <div class="app initial-hidden" role="application" id="appRoot">
     <div class="left">
       <header>
         <div class="brand">
@@ -435,18 +633,24 @@
         </div>
 
         <div class="top-actions">
-          <div class="room-controls">
-            <!-- NOVO: botão Mudar vídeo (visível apenas quando um vídeo está carregado) -->
-            <button id="changeVideoBtn" class="btn">Mudar vídeo</button>
-
+          <div class="room-controls" id="headerRoomControls" aria-hidden="true" style="display:none">
+            <!-- Criar/Entrar antigos foram movidos para o Lobby -->
             <input id="roomInput" type="text" placeholder="Nome da sala (ex: sala123)" />
             <button id="createBtn" class="btn primary">Criar sala</button>
             <button id="joinBtn" class="btn primary">Entrar</button>
           </div>
 
-          <!-- Theme toggle (well located, header area) -->
+          <!-- Botão Mudar (solicitado) -->
+          <button id="changeVideoBtn" class="btn primary" title="Mudar vídeo" aria-label="Mudar vídeo" style="display:none">
+            Mudar
+          </button>
+
+          <!-- You asked to add a Lobby button and keep it -->
+          <button id="openLobbyBtn" class="btn primary" title="Abrir Lobby" aria-label="Abrir Lobby" style="margin-right:8px;">
+            Lobby
+          </button>
+
           <button id="themeToggle" aria-pressed="false" title="Alternar modo escuro" aria-label="Alternar modo escuro">
-            <!-- default icon: sun / moon toggled by JS -->
             <svg id="themeIcon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6.76 4.84l-1.8-1.79L3.17 4.84l1.79 1.8 1.8-1.8zM1 13h3v-2H1v2zm10 9h2v-3h-2v3zM17.24 4.84l1.79-1.8 1.79 1.8-1.8 1.79-1.78-1.79zM20 11v2h3v-2h-3zM12 5a7 7 0 100 14 7 7 0 000-14z"/></svg>
           </button>
         </div>
@@ -474,8 +678,6 @@
                       YouTube
                     </button>
                   </div>
-
-
 
                 <div class="upload-status"><span id="uploadStatus"></span></div>
               </div>
@@ -513,6 +715,25 @@
                 <button class="btn-ctl" id="muteBtn" title="Mudo" aria-label="Mudo">
                   <svg id="volIcon" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
                 </button>
+
+                <!-- Volume control (new) -->
+                <div class="quality-control" style="position:relative; pointer-events:auto;">
+                  <button id="volumeBtn" class="vol-btn" title="Volume" aria-haspopup="true" aria-expanded="false">
+                    <!-- distinct small icon (equalizer bars) so it doesn't look like the mute icon -->
+                    <svg class="vol-icon-small" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" focusable="false" role="img">
+                      <rect x="4" y="10" width="3" height="8" rx="1" fill="currentColor"></rect>
+                      <rect x="10.5" y="7" width="3" height="11" rx="1" fill="currentColor"></rect>
+                      <rect x="17" y="4" width="3" height="14" rx="1" fill="currentColor"></rect>
+                    </svg>
+                  </button>
+
+                  <div id="volumeMenu" class="vol-menu" role="menu" aria-hidden="true">
+                    <div class="vol-row">
+                      <input id="volumeSlider" class="vol-slider" type="range" min="0" max="100" step="1" value="100" aria-label="Controle de volume">
+                    </div>
+                    <!-- label removed to avoid layout jumps; slider stretches full width -->
+                  </div>
+                </div>
 
                 <button class="btn-ctl fullscreen" id="fsBtn" title="Tela cheia" aria-label="Tela cheia">
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -571,8 +792,71 @@
     </aside>
   </div>
 
-  <!-- ---------- Modal 'Como quer ser chamado?' ---------- -->
-  <div class="modal-overlay" id="nickModal" aria-hidden="true">
+  <!-- ---------- Lobby Overlay (FULLSCREEN) ---------- -->
+  <div class="lobby-overlay" id="lobbyOverlay" aria-hidden="true">
+    <div class="lobby" role="dialog" aria-modal="true" aria-label="Salas">
+      <div class="lobby-left">
+        <div class="lobby-header">
+          <div>
+            <div style="font-weight:700;font-size:18px">Salas Criadas</div>
+            <div style="font-size:13px;color:var(--muted)">Dedicado ao Melhores Calls.💖</div>
+          </div>
+          <div class="lobby-actions" style="display:flex;align-items:center;gap:8px">
+            <div class="search-bar">
+              <input id="lobbySearch" class="search-input" placeholder="Procurar sala..." />
+            </div>
+            <button id="openCreateBtn" class="btn primary create-room-btn">Criar sala</button>
+
+            <button id="fecharBtn" class="btn primary">Fechar</button>
+            
+
+            <!-- NEW: Return to room button (replacement for old close button) -->
+            <button id="returnToRoomBtn" class="btn ghost" title="Voltar para a sala" aria-label="Voltar para a sala">Voltar para a sala</button>
+          </div>
+        </div>
+
+        <div id="roomsContainer" class="rooms-list" aria-live="polite">
+          <!-- dynamically added room cards -->
+        </div>
+
+        <div id="lobbyEmptyNote" class="lobby-empty" style="display:none">Nenhuma sala encontrada. Crie a sua!</div>
+      </div>
+
+  <!-- ---------- Create Room Modal (NEW compact) -->
+  <div class="modal-overlay" id="createModal" aria-hidden="true" style="display:none">
+    <div class="modal-content modal-compact">
+      <h3 class="modal-title">Criar Nova Sala</h3>
+      <p class="modal-subtitle">Escolha um nome, senha opcional, e seu apelido (host entra direto).</p>
+
+      <input id="createRoomName" class="modal-input" placeholder="Nome da sala (ex: sala123)" maxlength="40" />
+      <input id="createRoomPass" class="modal-input" placeholder="Senha (opcional)" maxlength="40" />
+      <input id="createRoomNick" class="modal-input" placeholder="Seu apelido" maxlength="40" />
+
+      <div class="modal-actions">
+        <button id="createConfirmBtn" class="btn primary">Criar e Entrar</button>
+        <button id="createCancelBtn" class="btn ghost">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Join Prompt Modal (NEW) -->
+  <div class="modal-overlay" id="joinModal" aria-hidden="true" style="display:none">
+    <div class="modal-content modal-compact">
+      <h3 class="modal-title">Entrar na Sala</h3>
+      <p class="modal-subtitle" id="joinModalSubtitle">Informe os dados para entrar</p>
+
+      <input id="joinRoomPass" class="modal-input" placeholder="Senha (se a sala tiver)" maxlength="40" />
+      <input id="joinRoomNick" class="modal-input" placeholder="Seu apelido (ex: Maria)" maxlength="40" />
+
+      <div class="modal-actions">
+        <button id="joinConfirmBtn" class="btn primary">Entrar</button>
+        <button id="joinCancelBtn" class="btn ghost">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Modal 'Como quer ser chamado?' (legacy kept) -->
+  <div class="modal-overlay" id="nickModal" aria-hidden="true" style="display:none">
     <div class="modal-content">
       <h3 class="modal-title">Como quer ser chamado?</h3>
       <p class="modal-subtitle">Digite seu nome para o chat da sala</p>
@@ -582,11 +866,10 @@
       </div>
     </div>
   </div>
-  <!-- ------------------------------------------------------------------------------- -->
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    // elements
+    // elements (many from original)
     const socket = io();
     const roomInput = document.getElementById('roomInput');
     const createBtn = document.getElementById('createBtn');
@@ -641,10 +924,45 @@
     const themeIcon = document.getElementById('themeIcon');
     const NEW_MESSAGE_BTN = document.getElementById('newMsgBtn');
 
+    // lobby elements (new)
+    const lobbyOverlay = document.getElementById('lobbyOverlay');
+    const openLobbyBtn = document.getElementById('openLobbyBtn');
+    // replaced old closeLobbyBtn entirely with returnToRoomBtn
+    const returnToRoomBtn = document.getElementById('returnToRoomBtn');
+    const openCreateBtn = document.getElementById('openCreateBtn');
+    const roomsContainer = document.getElementById('roomsContainer');
+    const lobbySearch = document.getElementById('lobbySearch');
+    const lobbyStats = document.getElementById('lobbyStats');
+    const lobbyEmptyNote = document.getElementById('lobbyEmptyNote');
+
+    // NEW fechar button
+    const fecharBtn = document.getElementById('fecharBtn');
+
+    // volume elements
+    const volumeBtn = document.getElementById('volumeBtn');
+    const volumeMenu = document.getElementById('volumeMenu');
+    const volumeSlider = document.getElementById('volumeSlider');
+
+    // create / join modals (new)
+    const createModal = document.getElementById('createModal');
+    const createRoomName = document.getElementById('createRoomName');
+    const createRoomPass = document.getElementById('createRoomPass');
+    const createRoomNick = document.getElementById('createRoomNick');
+    const createConfirmBtn = document.getElementById('createConfirmBtn');
+    const createCancelBtn = document.getElementById('createCancelBtn');
+
+    const joinModal = document.getElementById('joinModal');
+    const joinRoomPass = document.getElementById('joinRoomPass');
+    const joinRoomNick = document.getElementById('joinRoomNick');
+    const joinConfirmBtn = document.getElementById('joinConfirmBtn');
+    const joinCancelBtn = document.getElementById('joinCancelBtn');
+    const joinModalSubtitle = document.getElementById('joinModalSubtitle');
+
     let nickname = '';
     function askNick() {
       nickModal.classList.add('visible');
       nickModal.setAttribute('aria-hidden', 'false');
+      nickModal.style.display = 'flex';
       setTimeout(() => nickInput.focus(), 100);
     }
     function saveNick() {
@@ -652,6 +970,7 @@
       nickname = n ? n.slice(0, 40) : ('Guest' + Math.floor(Math.random() * 9000 + 1000));
       nickModal.classList.remove('visible');
       nickModal.setAttribute('aria-hidden', 'true');
+      nickModal.style.display = 'none';
     }
     nickSaveBtn.addEventListener('click', saveNick);
     nickInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveNick(); } });
@@ -699,7 +1018,6 @@
         if (theme === 'dark') {
           document.body.classList.add('dark');
           themeToggle.setAttribute('aria-pressed','true');
-          // set moon icon
           themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
         } else {
           document.body.classList.remove('dark');
@@ -708,7 +1026,6 @@
         }
 
         if (animate) {
-          // small animation class on .app for a subtle pulse
           try {
             appRoot.classList.add('theme-anim');
             setTimeout(()=> appRoot.classList.remove('theme-anim'), 420);
@@ -738,8 +1055,6 @@
 
     // -------------------------
     // chat autoscroll improvements
-    // - if user is near bottom, new messages auto-scroll
-    // - if user scrolled up, do NOT force-scroll; show "Novas mensagens" button
     // -------------------------
     let isUserNearBottom = true;
     function updateIsNearBottom(){
@@ -753,16 +1068,13 @@
       }
       return atBottom;
     }
-    // when user clicks new messages, scroll to bottom
     NEW_MESSAGE_BTN.addEventListener('click', ()=> {
       messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
       NEW_MESSAGE_BTN.style.display = 'none';
       isUserNearBottom = true;
     });
-    // detect user scroll
     messages.addEventListener('scroll', ()=> {
       const atBottom = updateIsNearBottom();
-      // if user scrolled to bottom manually, hide button
       if (atBottom) NEW_MESSAGE_BTN.style.display = 'none';
     });
 
@@ -794,37 +1106,55 @@
       controlsOverlay.setAttribute('aria-hidden','true');
     }
 
-    // helper: centraliza visibilidade do botão 'Mudar vídeo'
-    function showChangeBtn(show) {
+    // helper: whether media is actively playing
+    function isMediaPlaying() {
+      try {
+        if (isYouTube && ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
+          const st = ytPlayer.getPlayerState();
+          return st === 1; // YT.PlayerState.PLAYING
+        } else if (video) {
+          return !video.paused && !video.ended && video.readyState > 2;
+        }
+      } catch(e){}
+      return false;
+    }
+
+    // centraliza visibilidade do botão 'Mudar vídeo'
+    function showChangeBtn(forceShow = false) {
       if (!changeVideoBtn) return;
-      if (show) {
+      // Show when:
+      //  - explicitly requested (changeMode true), OR
+      //  - there is any video loaded (youtube OR video.src), OR
+      //  - forceShow param true (explicit caller)
+      const hasVideoLoaded = (isYouTube === true) || (video && typeof video.src === 'string' && video.src.trim() !== '');
+      const shouldShow = changeMode === true || hasVideoLoaded || forceShow;
+      if (shouldShow) {
         changeVideoBtn.style.display = 'inline-flex';
-        // small attention pulse when it first appears
-        changeVideoBtn.classList.add('pulse');
-        setTimeout(()=> changeVideoBtn.classList.remove('pulse'), 3000);
+        // brief pulse if we just made it visible and not in confirm mode
+        if (!changeVideoBtn.classList.contains('pulse') && !changeMode) {
+          changeVideoBtn.classList.add('pulse');
+          setTimeout(()=> changeVideoBtn.classList.remove('pulse'), 2500);
+        }
       } else {
         changeVideoBtn.style.display = 'none';
         changeVideoBtn.classList.remove('pulse');
       }
     }
 
-    // helper: enter/exit confirm mode
     function enterConfirmMode() {
       changeMode = true;
       changeVideoBtn.textContent = 'Enviar (temporário)';
       changeVideoBtn.classList.add('primary');
-      // ensure visible
-      showChangeBtn(true);
+      showChangeBtn(true); // force visible while confirming
     }
     function exitConfirmMode() {
       changeMode = false;
       pendingFile = null;
       pendingYouTube = null;
-      changeVideoBtn.textContent = 'Mudar vídeo';
+      changeVideoBtn.textContent = 'Mudar';
       changeVideoBtn.classList.remove('primary');
-      // keep visible if there's an active video, else hide
-      const hasVideo = !!(isYouTube || (video && video.src));
-      showChangeBtn(hasVideo);
+      // show only if video present
+      showChangeBtn(true);
       uploadStatus.textContent = '';
     }
 
@@ -837,11 +1167,7 @@
     }
 
     // -------------------------
-    // setVideo accepts:
-    //  - null -> clears
-    //  - string -> direct video url
-    //  - object: { video: url } (same as before)
-    //  - object: { youtube: "<id>" } -> youtube id
+    // setVideo ...
     // -------------------------
     function setVideo(src){
       clearYouTubePlayerInterval();
@@ -850,7 +1176,6 @@
       qualitiesMap = null;
       originalSrc = null;
 
-      // clear previous youtube ui
       function cleanupVideoElement(){
         try { video.pause(); } catch(e){}
         try { video.removeAttribute('src'); video.load(); } catch(e){}
@@ -875,14 +1200,11 @@
         hideControlsNow();
         if (qualityControl) { qualityControl.hidden = true; qualityControl.setAttribute('aria-hidden','true'); }
         qualityLabel.textContent = 'Qualidade: -';
-        // hide change video button
         showChangeBtn(false);
         return;
       }
 
-      // If server sent an object with youtube id
       if (typeof src === 'object' && src !== null && src.youtube) {
-        // youtube mode
         const id = src.youtube;
         originalSrc = 'youtube:' + id;
         cleanupVideoElement();
@@ -890,12 +1212,11 @@
         openYouTubePlayer(id);
         qualityLabel.textContent = 'Qualidade: YouTube';
         placeholder.style.display = 'none';
-        // show change video button (since a video is present)
-        showChangeBtn(true);
+        // ensure change button visible whenever a video is set
+        setTimeout(()=> showChangeBtn(true), 150);
         return;
       }
 
-      // legacy: object containing video url
       if (typeof src === 'object' && src !== null && src.video) {
         videoUrl = src.video;
         if (src.qualities && typeof src.qualities === 'object') {
@@ -908,7 +1229,6 @@
         return;
       }
 
-      // normal <video> flow (existing)
       originalSrc = videoUrl;
 
       if (qualitiesMap && !qualitiesMap['original']) {
@@ -926,7 +1246,6 @@
         currentQuality = 'Auto';
       }
 
-      // ensure youtube cleaned
       if (ytPlayer && typeof ytPlayer.destroy === 'function') {
         try { ytPlayer.destroy(); } catch(e){}
       }
@@ -940,6 +1259,8 @@
         placeholder.style.display = 'none';
         showControlsTemporarily();
         updatePlayPauseUI();
+        // ensure change button visible whenever a video is set
+        setTimeout(()=> showChangeBtn(true), 120);
       };
 
       video.src = originalSrc;
@@ -954,14 +1275,13 @@
       }
       qualityLabel.textContent = 'Qualidade: ' + currentQuality;
 
-      // show change video button now that a normal video is loaded
       showChangeBtn(true);
     }
 
     function populateQualityMenu(){
       while (qualityMenu.firstChild) qualityMenu.removeChild(qualityMenu.firstChild);
 
-      const preferredOrder = ['Auto','1080p','720p','480p','360p','original'];
+           const preferredOrder = ['Auto','1080p','720p','480p','360p','original'];
       const keys = Object.keys(qualitiesMap || {});
       const ordered = preferredOrder.filter(k => keys.includes(k)).concat(keys.filter(k => !preferredOrder.includes(k)));
 
@@ -1017,7 +1337,7 @@
     function openQualityMenu(){
       qualityMenu.classList.add('visible');
       qualityBtn.setAttribute('aria-expanded', 'true');
-      qualityMenu.setAttribute('aria-hidden', 'false');
+      qualityMenu.setAttribute('aria-hidden','false');
       const first = qualityMenu.querySelector('.qc-item');
       if (first) first.focus();
       document.addEventListener('click', onDocClickCloseQuality);
@@ -1026,7 +1346,7 @@
     function closeQualityMenu(){
       qualityMenu.classList.remove('visible');
       qualityBtn.setAttribute('aria-expanded', 'false');
-      qualityMenu.setAttribute('aria-hidden', 'true');
+      qualityMenu.setAttribute('aria-hidden','true');
       document.removeEventListener('click', onDocClickCloseQuality);
       document.removeEventListener('keydown', onDocKeyCloseQuality);
     }
@@ -1040,21 +1360,13 @@
     }
     function onDocKeyCloseQuality(e){
       if (e.key === 'Escape') closeQualityMenu();
-    }
+    }  // memorize esse codigo e espere a segunda parte pra memorizwar tbm
 
-    if (qualityBtn) {
-      qualityBtn.addEventListener('click', toggleQualityMenu);
-      qualityBtn.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleQualityMenu(e); }
-      });
-    }
-
+// --- Play/Pause UI + controls (part 2 content) ---
     function updatePlayPauseUI(){
       if (isYouTube) {
-        // get state from ytPlayer if available
         try {
           const st = ytPlayer && typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : null;
-          // YT states: -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued
           if (st === 1) {
             ctlPlay.style.display = 'none';
             ctlPause.style.display = 'block';
@@ -1075,6 +1387,8 @@
           ctlPause.style.display = 'block';
         }
       }
+      // ensure change button visible when a video exists (do not hide on pause/end)
+      showChangeBtn(true);
     }
 
     async function togglePlay(){
@@ -1124,26 +1438,8 @@
       showControlsTemporarily(); e.stopPropagation();
     });
 
-    muteBtn.addEventListener('click', (e)=> {
-      if (isYouTube && ytPlayer) {
-        if (ytPlayer.isMuted && ytPlayer.isMuted()) {
-          ytPlayer.unMute();
-          volIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/>';
-        } else {
-          ytPlayer.mute();
-          volIcon.innerHTML = '<path d="M16.5 12c0-1.77-.77-3.36-2-4.47v8.94c1.23-1.11 2-2.7 2-4.47zM5 9v6h4l5 5V4L9 9H5z"/>';
-        }
-      } else {
-        video.muted = !video.muted;
-        if (video.muted) {
-          volIcon.innerHTML = '<path d="M16.5 12c0-1.77-.77-3.36-2-4.47v8.94c1.23-1.11 2-2.7 2-4.47zM5 9v6h4l5 5V4L9 9H5z"/>';
-        } else {
-          volIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/>';
-        }
-      }
-      showControlsTemporarily();
-      e.stopPropagation();
-    });
+    // NOTE: removed the earlier top-level muteBtn listener to avoid double-binding/conflict.
+    // A single unified mute handler exists below (inside the reveal/app IIFE) and will be attached once.
 
     fsBtn.addEventListener('click', (e) => {
       const el = videoInner;
@@ -1203,26 +1499,6 @@
       e.stopPropagation();
     });
 
-    video.addEventListener('timeupdate', updateProgressUI);
-    video.addEventListener('loadedmetadata', ()=> {
-      durationEl.textContent = fmtTime(video.duration);
-      updateProgressUI();
-      updatePlayPauseUI();
-    });
-    video.addEventListener('play', ()=> { updatePlayPauseUI(); sendControl(true); });
-    video.addEventListener('pause', ()=> { updatePlayPauseUI(); sendControl(false); });
-    video.addEventListener('seeked', ()=> { updateProgressUI(); sendControl(!video.paused); });
-
-    videoInner.addEventListener('mousemove', (e)=>{ showControlsTemporarily(); });
-    videoInner.addEventListener('touchstart', ()=> showControlsTemporarily());
-
-    document.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && document.activeElement !== chatInput && document.activeElement.tagName.toLowerCase() !== 'input') {
-        e.preventDefault();
-        togglePlay();
-      }
-    });
-
     // -------------------------
     // YouTube API helpers (mantive fetch/meta helpers)
     // -------------------------
@@ -1274,7 +1550,6 @@
       wrapper.id = 'yt-wrapper-' + iframeId;
 
       const origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
-      // ADJUSTED: add controls=0 and iv_load_policy=3 to reduce YouTube overlays and annotations.
       const src = 'https://www.youtube.com/embed/' + encodeURIComponent(id) +
                   '?enablejsapi=1&controls=0&iv_load_policy=3&rel=0&modestbranding=1&playsinline=1&autoplay=1&origin=' + encodeURIComponent(origin);
 
@@ -1338,7 +1613,7 @@
                   showUnembeddableUI(id, e.data);
                 } else {
                   if (uploadStatus) uploadStatus.textContent = 'Vídeo indisponível (código ' + e.data + ').';
-                  try { e.target.destroy && e.target.destroy(); } catch(_){}
+                  try { e.target.destroy && e.target.destroy(); } catch(_){ }
                   ytPlayer = null;
                   isYouTube = false;
                   ytContainer.style.display = 'none';
@@ -1393,9 +1668,102 @@
     // -------------------------
     // chat & socket handlers
     // -------------------------
-    socket.on('connect', () => { logStatus('Conectado'); console.log('socket conectado', socket.id); });
+    socket.on('connect', () => {
+      logStatus('Conectado');
+      console.log('socket conectado', socket.id);
+      try { socket.emit('list-rooms'); } catch(e){}
+    });
+
+    // handle server-provided room list (if server supports it)
+    let lobbyRooms = []; // { name, count, hasPassword }
+
+    // Normalize room helper: aceita string/object e retorna objeto consistente
+    function normalizeRoom(r){
+      if (!r) return { name: '', count: 0, hasPassword: false };
+      if (typeof r === 'string') return { name: r, count: 0, hasPassword: false };
+      if (typeof r === 'object') {
+        const name =
+          (typeof r.name === 'string' && r.name.trim()) ? r.name.trim()
+          : (typeof r.room === 'string' && r.room.trim()) ? r.room.trim()
+          : (typeof r.title === 'string' && r.title.trim()) ? r.title.trim()
+          : String(r.name || r.room || r.id || '');
+        return { name: name, count: Number(r.count || 0), hasPassword: !!r.hasPassword };
+      }
+      return { name: String(r), count:0, hasPassword:false };
+    }
+
+    function renderRooms(filter='') {
+      roomsContainer.innerHTML = '';
+      const q = String(filter || '').trim().toLowerCase();
+
+      // ensure lobbyRooms entries are normalized objects
+      lobbyRooms = (lobbyRooms || []).map(normalizeRoom);
+
+      const list = lobbyRooms.filter(r => !q || (r.name && r.name.toLowerCase().includes(q)));
+      if (!list.length) {
+        lobbyEmptyNote.style.display = 'block';
+      } else {
+        lobbyEmptyNote.style.display = 'none';
+      }
+      list.forEach(r => {
+        const card = document.createElement('div');
+        card.className = 'room-card';
+        const name = document.createElement('div');
+        name.className = 'room-name';
+        name.textContent = String(r.name || '—');
+        const meta = document.createElement('div');
+        meta.className = 'room-meta';
+        meta.innerHTML = `<span class="lock">${r.hasPassword ? '🔒' : '🔓'}</span><span>${(Number(r.count)||0)} assistindo</span>`;
+        const actions = document.createElement('div');
+        actions.className = 'room-actions';
+        const joinBtnLocal = document.createElement('button');
+        joinBtnLocal.className = 'btn ghost';
+        joinBtnLocal.textContent = 'Entrar';
+        joinBtnLocal.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openJoinForRoom(r);
+        });
+        actions.appendChild(joinBtnLocal);
+        card.appendChild(name);
+        card.appendChild(meta);
+        card.appendChild(actions);
+        roomsContainer.appendChild(card);
+      });
+
+      const stats = `Salas: ${lobbyRooms.length} • Filtradas: ${list.length}`;
+      if (lobbyStats) lobbyStats.textContent = stats;
+    }
+
+    function addOrUpdateRoom(r){
+      const roomObj = normalizeRoom(r);
+      const idx = lobbyRooms.findIndex(x => x.name === roomObj.name);
+      if (idx >= 0) lobbyRooms[idx] = roomObj;
+      else lobbyRooms.unshift(roomObj);
+      renderRooms(lobbySearch.value);
+    }
+    function removeRoomByName(n){
+      const nameStr = String(n || '').trim();
+      lobbyRooms = lobbyRooms.filter(x => x.name !== nameStr);
+      renderRooms(lobbySearch.value);
+    }
+
+    // server events to maintain lobby (if implemented server-side)
+    socket.on('room-list', (list) => {
+      if (!Array.isArray(list)) return;
+      lobbyRooms = list.map(it => normalizeRoom(it));
+      renderRooms(lobbySearch.value);
+    });
+    socket.on('room-created', (r) => {
+      if (!r) return;
+      addOrUpdateRoom(r);
+    });
+    socket.on('room-removed', (rname) => {
+      removeRoomByName(rname);
+    });
+    socket.on('room-count', n => { roomCount.textContent = (n || 0) + ' pessoas assistindo'; });
+
+    // server video handlers
     socket.on('video-ready', (src) => {
-      // server may send { youtube: id } or a string/url or object { video: url }
       setVideo(src);
       logStatus('Vídeo disponível');
     });
@@ -1403,8 +1771,39 @@
       if (data && (data.id || data.youtube)) setVideo({ youtube: data.id || data.youtube });
     });
 
-    socket.on('room-count', n => { roomCount.textContent = (n || 0) + ' pessoas assistindo'; });
     socket.on('chat-history', hist => { messages.innerHTML=''; if (Array.isArray(hist)) hist.forEach(m=> appendMessage(m)); });
+
+    // improved appendMessage: respects user scroll position and avoids [object Object]
+    function escapeHtml(s){ if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function formatTime(ts){ const d = new Date(ts); return d.toLocaleTimeString(); }
+
+    function appendMessage(msg){
+      try {
+        const atBottomBefore = updateIsNearBottom();
+
+        const user = (msg && (typeof msg.user === 'string' || typeof msg.user === 'number')) ? String(msg.user) :
+                     (msg && msg.user && typeof msg.user === 'object') ? (msg.user.name || JSON.stringify(msg.user)) : 'System';
+        const text = (msg && (typeof msg.text === 'string' || typeof msg.text === 'number')) ? String(msg.text) :
+                     (msg && msg.text && typeof msg.text === 'object') ? JSON.stringify(msg.text) : '';
+        const ts = (msg && msg.ts) ? msg.ts : Date.now();
+
+        const el = document.createElement('div'); el.className = 'msg' + (user === nickname ? ' mine' : '');
+        el.innerHTML = `<strong style="font-size:12px">${escapeHtml(user)}</strong><div style="margin-top:6px">${escapeHtml(text)}</div><div style="font-size:11px;color:#999;margin-top:6px">${formatTime(ts)}</div>`;
+        messages.appendChild(el);
+
+        if (atBottomBefore) {
+          messages.scrollTop = messages.scrollHeight;
+          NEW_MESSAGE_BTN.style.display = 'none';
+          isUserNearBottom = true;
+        } else {
+          NEW_MESSAGE_BTN.style.display = 'inline-flex';
+          isUserNearBottom = false;
+        }
+      } catch(e) {
+        console.error('appendMessage error', e);
+      }
+    }
+
     socket.on('chat-message', msg => appendMessage(msg));
     socket.on('chat-cleared', ()=> messages.innerHTML='');
     socket.on('chat-error', e => alert(e?.error || 'Erro no chat'));
@@ -1417,14 +1816,8 @@
       try {
         if (isYouTube && ytPlayer) {
           const localTime = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
-          if (Math.abs(localTime - payload.time) > SEEK_THRESHOLD) {
-            try { ytPlayer.seekTo(payload.time, true); } catch(e){}
-          }
-          if (payload.playing) {
-            try { ytPlayer.playVideo(); } catch(e){}
-          } else {
-            try { ytPlayer.pauseVideo(); } catch(e){}
-          }
+          if (Math.abs(localTime - payload.time) > SEEK_THRESHOLD) {try { ytPlayer.seekTo(payload.time, true); } catch(e){} }
+          if (payload.playing) { try { ytPlayer.playVideo(); } catch(e){} } else { try { ytPlayer.pauseVideo(); } catch(e){} }
           syncing = false;
         } else {
           if (Math.abs(video.currentTime - payload.time) > SEEK_THRESHOLD) {
@@ -1442,21 +1835,196 @@
       } catch(e) { console.error(e); syncing=false; }
     });
 
-    // UI actions: create/join
-    createBtn.addEventListener('click', () => {
-      const r = roomInput.value.trim(); if (!r) return alert('Digite o nome da sala');
-      room = r; isHost = true; askNick();
-      socket.emit('create-room', room);
-      uploadAreaShow(true); roomTitle.textContent = 'Sala ' + room; logStatus('Você é host — envie o vídeo');
+    // ===== Lobby controls =====
+    openLobbyBtn.addEventListener('click', () => {
+      lobbyOverlay.style.display = 'flex';
+      lobbyOverlay.setAttribute('aria-hidden','false');
+      try { socket.emit('list-rooms'); } catch(e){}
+      // when opening lobby, if user is in-room ensure return button is visible
+      try {
+        if (window.__sync_in_room && returnToRoomBtn) {
+          returnToRoomBtn.style.display = 'inline-flex';
+          // keep it inline near the create button (do not force fixed)
+          returnToRoomBtn.classList.remove('return-fixed');
+        }
+        // ensure fechar button visibility depends on in-room
+        if (window.__sync_in_room && fecharBtn) {
+          fecharBtn.style.display = 'inline-flex';
+        } else if (fecharBtn) {
+          fecharBtn.style.display = 'none';
+        }
+      } catch(e){}
     });
 
-    joinBtn.addEventListener('click', () => {
-      const r = roomInput.value.trim(); if (!r) return alert('Digite o nome da sala');
-      room = r; isHost = false; askNick();
-      socket.emit('join-room', room);
-      uploadAreaShow(false); roomTitle.textContent = 'Sala ' + room; logStatus('Entrou na sala — aguardando vídeo');
+    // NEW: returnToRoomBtn closes lobby and returns to room view
+    if (returnToRoomBtn) {
+      returnToRoomBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        try {
+          lobbyOverlay.style.display = 'none';
+          lobbyOverlay.setAttribute('aria-hidden','true');
+          // keep button visible when user is in-room (we want it accessible)
+          if (window.__sync_in_room) {
+            // ensure it's visible inline (not fixed) by default
+            returnToRoomBtn.style.display = 'inline-flex';
+            returnToRoomBtn.classList.remove('return-fixed');
+          } else {
+            // if not in room, hide
+            returnToRoomBtn.style.display = 'none';
+            returnToRoomBtn.classList.remove('return-fixed');
+          }
+        } catch(e){}
+      });
+    }
+
+    // NEW: fecharBtn closes lobby overlay; only visible when user is in-room (set elsewhere)
+    if (fecharBtn) {
+      fecharBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        try {
+          lobbyOverlay.style.display = 'none';
+          lobbyOverlay.setAttribute('aria-hidden','true');
+          // fecharBtn remains visible while the user stays in-room (per requirement)
+        } catch(e){}
+      });
+    }
+
+    lobbySearch.addEventListener('input', (e) => {
+      renderRooms(lobbySearch.value);
     });
 
+    // open create modal
+    openCreateBtn.addEventListener('click', () => {
+      createModal.style.display = 'flex';
+      createModal.classList.add('visible');
+      createModal.setAttribute('aria-hidden','false');
+      setTimeout(()=> createRoomName.focus(), 80);
+    });
+    createCancelBtn.addEventListener('click', () => {
+      createModal.classList.remove('visible');
+      createModal.setAttribute('aria-hidden','true');
+      createModal.style.display = 'none';
+    });
+
+    // Create confirm: create room with optional password and nickname, host enters immediately
+    createConfirmBtn.addEventListener('click', async () => {
+      const r = (createRoomName.value || '').trim();
+      const pw = (createRoomPass.value || '').trim();
+      const nick = (createRoomNick.value || '').trim();
+      if (!r) { alert('Digite o nome da sala'); createRoomName.focus(); return; }
+      const hostNick = nick ? nick.slice(0,40) : ('Host' + Math.floor(Math.random()*9000+1000));
+      room = r;
+      isHost = true;
+      nickname = hostNick;
+      roomTitle.textContent = 'Sala ' + room;
+      logStatus('Você é host — enviando criação de sala...');
+      uploadAreaShow(true);
+      createModal.classList.remove('visible'); createModal.style.display='none';
+      lobbyOverlay.style.display = 'none'; lobbyOverlay.setAttribute('aria-hidden','true');
+
+      // Reveal player/chat now that user created/entered a room
+      revealAppForRoom();
+
+      // show the new return button (right of "Criar sala") and also make it fixed for persistent access
+      try {
+        if (returnToRoomBtn) {
+          returnToRoomBtn.style.display = 'inline-flex';
+          // make it fixed so user can always return to the room
+          returnToRoomBtn.classList.add('return-fixed');
+        }
+        // show fechar button next to create (per request)
+        if (fecharBtn) {
+          fecharBtn.style.display = 'inline-flex';
+        }
+      } catch(e){}
+
+      try {
+        socket.emit('create-room', { room, password: pw || null, host: nickname }, (ack) => {
+          if (ack && ack.ok) {
+            console.log('server ack create-room');
+          }
+        });
+      } catch (err) {
+        try { socket.emit('create-room', { room }); } catch(_){ console.warn('emit create-room fallback failed', _); }
+      }
+
+      try {
+        socket.emit('room-created', { name: room, count: 1, hasPassword: !!pw });
+      } catch(e){ /* ignore */ }
+      try { socket.emit('list-rooms'); } catch(e){}
+
+      addOrUpdateRoom({ name: room, count: 1, hasPassword: !!pw });
+    });
+
+    // Open join flow for a room object
+    let joinTargetRoom = null;
+    function openJoinForRoom(r){
+      const nr = normalizeRoom(r);
+      joinTargetRoom = nr;
+      joinRoomPass.value = '';
+      joinRoomNick.value = '';
+      joinModalSubtitle.textContent = `Entrar em ${nr.name}${nr.hasPassword ? ' — senha requerida' : ''}`;
+      joinModal.style.display = 'flex';
+      joinModal.classList.add('visible');
+      joinModal.setAttribute('aria-hidden','false');
+      setTimeout(()=> joinRoomNick.focus(), 100);
+    }
+    joinCancelBtn.addEventListener('click', () => {
+      joinModal.classList.remove('visible');
+      joinModal.setAttribute('aria-hidden','true');
+      joinModal.style.display = 'none';
+      joinTargetRoom = null;
+    });
+
+    joinConfirmBtn.addEventListener('click', () => {
+      if (!joinTargetRoom) return;
+      const pw = (joinRoomPass.value || '').trim();
+      const nick = (joinRoomNick.value || '').trim();
+      if (!nick) { alert('Digite seu apelido'); joinRoomNick.focus(); return; }
+
+      room = joinTargetRoom.name;
+      isHost = false;
+      nickname = nick.slice(0,40);
+      roomTitle.textContent = 'Sala ' + room;
+      logStatus('Entrando na sala...');
+      uploadAreaShow(false);
+
+      joinModal.classList.remove('visible'); joinModal.style.display='none';
+      lobbyOverlay.style.display = 'none'; lobbyOverlay.setAttribute('aria-hidden','true');
+
+      // Reveal player/chat now that user entered a room
+      revealAppForRoom();
+
+      // show the new return button (right of "Criar sala") and make it fixed to persist
+      try {
+        if (returnToRoomBtn) {
+          returnToRoomBtn.style.display = 'inline-flex';
+          returnToRoomBtn.classList.add('return-fixed');
+        }
+        // show fechar button next to create (per request)
+        if (fecharBtn) {
+          fecharBtn.style.display = 'inline-flex';
+        }
+      } catch(e){}
+
+      try {
+        socket.emit('join-room', { room, password: pw || null, user: nickname }, (ack) => {
+          if (ack && ack.ok) console.log('server ack join-room');
+        });
+      } catch (err) {
+        try { socket.emit('join-room', room); } catch(_){ console.warn('emit join-room fallback failed', _); }
+      }
+
+      try { socket.emit('room-joined', { name: room, user: nickname }); } catch(e){}
+      try { socket.emit('list-rooms'); } catch(e){}
+    });
+
+    try {
+      const hdr = document.getElementById('headerRoomControls');
+      if (hdr) hdr.style.display = 'none';
+    } catch(e){}
+
+    // upload area logic (kept)
     function uploadAreaShow(show){
       const ua = document.querySelector('.upload-area');
       if(!ua) return;
@@ -1475,7 +2043,6 @@
       if (!f) {
         uploadStatus.textContent = '';
         uploadBtn.disabled = true;
-        // if in changeMode, clear pendingFile
         if (changeMode) {
           pendingFile = null;
           uploadStatus.textContent = 'Nenhum arquivo selecionado.';
@@ -1486,15 +2053,12 @@
       uploadStatus.textContent = `${f.name} (${fmtSize(f.size)}) — pronto para envio`;
       uploadBtn.disabled = false;
 
-      // If we're in confirm (change) flow, set pendingFile instead of auto-sending
       if (changeMode) {
         pendingFile = f;
-        // keep file in input (we'll upload when user clicks "Enviar (temporário)")
-        uploadStatus.textContent = `Arquivo selecionado: ${f.name} (${fmtSize(f.size)}). Clique em "Enviar (temporário)" para aplicar à sala.`;
+        uploadStatus.textContent = `Arquivo selecionado: ${f.name} (${fmtSize(f.size)}). Clique em "Enviar (temporário)" para aplicar à sala ${room}.`;
       }
     });
 
-    // regular uploadBtn click (legacy direct upload) remains available
     if (uploadBtn) {
       uploadBtn.addEventListener('click', async () => {
         const f = fileInput.files[0];
@@ -1512,7 +2076,6 @@
           if (!res.ok) throw new Error('HTTP ' + res.status);
           const json = await res.json();
 
-          // NORMALIZA o objeto de vídeo que será usado localmente e emitido
           let payload;
           if (typeof json === 'string') {
             payload = { video: json };
@@ -1524,19 +2087,16 @@
             throw new Error('Resposta inválida do servidor');
           }
 
-          // aplica localmente (setVideo aceita string ou objeto { video: url, ... })
           try {
             if (payload.video) setVideo(payload);
             else setVideo(payload);
-          } catch(e){ console.warn('setVideo fallback', e); }
+          } catch (e){ console.warn('setVideo fallback', e); }
 
-          // status UI
           uploadStatus.textContent = 'Upload concluído';
           logStatus('Upload OK — vídeo disponível');
           fileInput.value = '';
           uploadBtn.disabled = true;
 
-          // EMITE PARA O SERVIDOR COM A SALA (garante broadcast)
           try {
             socket.emit('video-ready', { room, video: payload }, (ack) => {
               if (ack && ack.ok) console.log('server ack video-ready');
@@ -1646,171 +2206,134 @@
     });
 
     // CHANGE VIDEO FLOW (new)
-    changeVideoBtn.addEventListener('click', async (e) => {
-      if (!isHost) {
-        return alert('Apenas o host pode mudar o vídeo');
-      }
-
-      // If not in change/confirm mode: activate it and open chooser
-      if (!changeMode) {
-        enterConfirmMode();
-
-        // quick chooser: OK -> YouTube, Cancel -> arquivo local
-        const wantYT = confirm('Deseja trocar por um vídeo do YouTube?\nOK = YouTube, Cancel = enviar um arquivo local.');
-        if (wantYT) {
-          if (!room) {
-            uploadStatus.textContent = 'Crie a sala primeiro.';
-            return;
-          }
-          const raw = prompt('Cole a URL do YouTube ou o ID (11 caracteres):');
-          if (!raw) {
-            // user cancelled prompt
-            pendingYouTube = null;
-            uploadStatus.textContent = 'Operação cancelada pelo usuário. Clique em "Enviar (temporário)" para aplicar (nenhum vídeo) ou feche.';
-            return;
-          }
-          const id = extractYouTubeID(raw);
-          if (!id) {
-            uploadStatus.textContent = 'ID inválido.';
-            pendingYouTube = null;
-            return;
-          }
-          // store pending YouTube (will be sent only when user clicks "Enviar (temporário)")
-          pendingYouTube = { id, raw };
-          pendingFile = null;
-          uploadStatus.textContent = `Pronto: ${raw} — clique em "Enviar (temporário)" para aplicar o vídeo a sala ${room}.`;
-          return;
-        } else {
-          // file flow: reveal upload area and open file selector
-          uploadAreaShow(true);
-          setTimeout(()=> {
-            try { fileInput.click(); } catch(err){ console.warn('Não foi possível abrir seletor de arquivos diretamente', err); uploadStatus.textContent = 'Selecione um arquivo manualmente.'; }
-          }, 140);
-          uploadStatus.textContent = 'Selecione um arquivo. Após escolher, clique em "Enviar (temporário)".';
-          return;
+    if (changeVideoBtn) {
+      changeVideoBtn.addEventListener('click', async (e) => {
+        if (!isHost) {
+          return alert('Apenas o host pode mudar o vídeo');
         }
-      }
 
-      // If already in confirm mode: act as "Enviar (temporário)" button
-      if (changeMode) {
-        // PRIORITY: pendingYouTube -> send YT; else pendingFile -> upload file; else alert
-        if (pendingYouTube) {
-          // try to validate meta then emit
-          uploadStatus.textContent = 'Enviando vídeo do YouTube...';
-          try {
-            const meta = await fetchYouTubeMeta(pendingYouTube.id).catch(()=>null);
-            if (meta && !meta.embeddable) {
-              uploadStatus.textContent = 'Este vídeo não permite incorporação.';
-              showUnembeddableUI(pendingYouTube.id, 150);
+        if (!changeMode) {
+          enterConfirmMode();
+
+          const wantYT = confirm('Deseja trocar por um vídeo do YouTube?\nOK = YouTube, Cancel = enviar um arquivo local.');
+          if (wantYT) {
+            if (!room) {
+              uploadStatus.textContent = 'Crie a sala primeiro.';
               return;
             }
-            // emit to server with room; handle ack if provided
+            const raw = prompt('Cole a URL do YouTube ou o ID (11 caracteres):');
+            if (!raw) {
+              pendingYouTube = null;
+              uploadStatus.textContent = 'Operação cancelada pelo usuário. Clique em "Enviar (temporário)" para aplicar (nenhum vídeo) ou feche.';
+              return;
+            }
+            const id = extractYouTubeID(raw);
+            if (!id) {
+              uploadStatus.textContent = 'ID inválido.';
+              pendingYouTube = null;
+              return;
+            }
+            pendingYouTube = { id, raw };
+            pendingFile = null;
+            uploadStatus.textContent = `Pronto: ${raw} — clique em "Enviar (temporário)" para aplicar o vídeo a sala ${room}.`;
+            return;
+          } else {
+            uploadAreaShow(true);
+            setTimeout(()=> {
+              try { fileInput.click(); } catch(err){ console.warn('Não foi possível abrir seletor de arquivos diretamente', err); uploadStatus.textContent = 'Selecione um arquivo manualmente.'; }
+            }, 140);
+            uploadStatus.textContent = 'Selecione um arquivo. Após escolher, clique em "Enviar (temporário)".';
+            return;
+          }
+        }
+
+        if (changeMode) {
+          if (pendingYouTube) {
+            uploadStatus.textContent = 'Enviando vídeo do YouTube...';
             try {
-              socket.emit('youtube', { room, url: pendingYouTube.raw, id: pendingYouTube.id, meta }, (resp) => {
-                if (resp && resp.ok) {
-                  setVideo({ youtube: pendingYouTube.id });
-                  logStatus('Vídeo do YouTube carregado (servidor confirmou)');
-                } else {
-                  setVideo({ youtube: pendingYouTube.id });
-                  logStatus('Vídeo do YouTube carregado (aplicado localmente)');
-                }
+              const meta = await fetchYouTubeMeta(pendingYouTube.id).catch(()=>null);
+              if (meta && !meta.embeddable) {
+                uploadStatus.textContent = 'Este vídeo não permite incorporação.';
+                showUnembeddableUI(pendingYouTube.id, 150);
+                return;
+              }
+              try {
+                socket.emit('youtube', { room, url: pendingYouTube.raw, id: pendingYouTube.id, meta }, (resp) => {
+                  if (resp && resp.ok) {
+                    setVideo({ youtube: pendingYouTube.id });
+                    logStatus('Vídeo do YouTube carregado (servidor confirmou)');
+                  } else {
+                    setVideo({ youtube: pendingYouTube.id });
+                    logStatus('Vídeo do YouTube carregado (aplicado localmente)');
+                  }
+                  pendingYouTube = null;
+                  exitConfirmMode();
+                });
+              } catch (err) {
+                console.warn('emit youtube falhou', err);
+                setVideo({ youtube: pendingYouTube.id });
+                logStatus('Vídeo do YouTube carregado (aplicado localmente)');
                 pendingYouTube = null;
                 exitConfirmMode();
-              });
+              }
             } catch (err) {
-              console.warn('emit youtube falhou', err);
-              setVideo({ youtube: pendingYouTube.id });
-              logStatus('Vídeo do YouTube carregado (aplicado localmente)');
-              pendingYouTube = null;
-              exitConfirmMode();
+              console.warn('Erro ao enviar YouTube', err);
+              uploadStatus.textContent = 'Falha ao enviar vídeo do YouTube.';
             }
-          } catch (err) {
-            console.warn('Erro ao enviar YouTube', err);
-            uploadStatus.textContent = 'Falha ao enviar vídeo do YouTube.';
+            return;
           }
-          return;
-        }
 
-        if (pendingFile) {
-          // upload file to server under room, same as uploadBtn flow
-          if (!room) { uploadStatus.textContent = 'Crie a sala primeiro.'; return; }
-          uploadStatus.textContent = 'Enviando arquivo para o servidor...';
-          const fd = new FormData();
-          fd.append('video', pendingFile);
-          fd.append('room', room);
-          try {
-            let res = await fetch(`/upload/${encodeURIComponent(room)}`, { method: 'POST', body: fd });
-            if (!res.ok) {
-              console.warn('/upload/:room falhou', res.status);
-              res = await fetch('/upload', { method:'POST', body: fd });
-            }
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const json = await res.json();
-
-            let payload;
-            if (typeof json === 'string') payload = { video: json };
-            else if (json && json.video) payload = json;
-            else if (json && typeof json === 'object') payload = json;
-            else throw new Error('Resposta inválida do servidor');
-
-            // Apply locally and emit to room
-            try { if (payload.video) setVideo(payload); else setVideo(payload); } catch(e){ console.warn('setVideo fallback', e); }
-
-            uploadStatus.textContent = 'Upload concluído e enviado à sala.';
-            logStatus('Upload OK — vídeo disponível');
-            fileInput.value = '';
-            pendingFile = null;
-
+          if (pendingFile) {
+            if (!room) { uploadStatus.textContent = 'Crie a sala primeiro.'; return; }
+            uploadStatus.textContent = 'Enviando arquivo para o servidor...';
+            const fd = new FormData();
+            fd.append('video', pendingFile);
+            fd.append('room', room);
             try {
-              socket.emit('video-ready', { room, video: payload }, (ack) => {
-                if (ack && ack.ok) console.log('server ack video-ready');
-              });
+              let res = await fetch(`/upload/${encodeURIComponent(room)}`, { method: 'POST', body: fd });
+              if (!res.ok) {
+                console.warn('/upload/:room falhou', res.status);
+                res = await fetch('/upload', { method:'POST', body: fd });
+              }
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              const json = await res.json();
+
+              let payload;
+              if (typeof json === 'string') payload = { video: json };
+              else if (json && json.video) payload = json;
+              else if (json && typeof json === 'object') payload = json;
+              else throw new Error('Resposta inválida do servidor');
+
+              try { if (payload.video) setVideo(payload); else setVideo(payload); } catch(e){ console.warn('setVideo fallback', e); }
+
+              uploadStatus.textContent = 'Upload concluído e enviado à sala.';
+              logStatus('Upload OK — vídeo disponível');
+              fileInput.value = '';
+              pendingFile = null;
+
+              try {
+                socket.emit('video-ready', { room, video: payload }, (ack) => {
+                  if (ack && ack.ok) console.log('server ack video-ready');
+                });
+              } catch (err) {
+                try { socket.emit('video-ready', payload); } catch(_) { console.warn('emit video-ready falhou', _); }
+              }
+
+              exitConfirmMode();
             } catch (err) {
-              try { socket.emit('video-ready', payload); } catch(_) { console.warn('emit video-ready falhou', _); }
+              console.error('Erro upload (confirm)', err);
+              uploadStatus.textContent = 'Erro no upload';
+              alert('Erro no upload: ' + (err.message || err));
             }
-
-            exitConfirmMode();
-          } catch (err) {
-            console.error('Erro upload (confirm)', err);
-            uploadStatus.textContent = 'Erro no upload';
-            alert('Erro no upload: ' + (err.message || err));
+            return;
           }
-          return;
-        }
 
-        // no pending selection
-        alert('Nenhum vídeo selecionado. Escolha um arquivo (clicando no seletor) ou informe um YouTube antes de enviar.');
-      }
-    });
+          alert('Nenhum vídeo selecionado. Escolha um arquivo (clicando no seletor) ou informe um YouTube antes de enviar.');
+        }
+      });
+    }
 
     // If user selects a file while in confirm mode, pendingFile is already set in fileInput listener.
-    // If user selects a file outside confirm mode (legacy), uploadBtn handles immediate upload.
-
-    function escapeHtml(s){ if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-    function formatTime(ts){ const d = new Date(ts); return d.toLocaleTimeString(); }
-
-    // improved appendMessage: respects user scroll position
-    function appendMessage(msg){
-      try {
-        const atBottomBefore = updateIsNearBottom();
-        const el = document.createElement('div'); el.className = 'msg' + (msg.user === nickname ? ' mine' : '');
-        el.innerHTML = `<strong style="font-size:12px">${escapeHtml(msg.user)}</strong><div style="margin-top:6px">${escapeHtml(msg.text)}</div><div style="font-size:11px;color:#999;margin-top:6px">${formatTime(msg.ts || Date.now())}</div>`;
-        messages.appendChild(el);
-
-        // If user was near bottom, scroll to bottom
-        if (atBottomBefore) {
-          messages.scrollTop = messages.scrollHeight;
-          NEW_MESSAGE_BTN.style.display = 'none';
-          isUserNearBottom = true;
-        } else {
-          // user scrolled up — show notification button
-          NEW_MESSAGE_BTN.style.display = 'inline-flex';
-          isUserNearBottom = false;
-        }
-      } catch(e) {
-        console.error('appendMessage error', e);
-      }
-    }
 
     sendBtn.addEventListener('click', sendChat);
     chatInput.addEventListener('keypress', (e)=> { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
@@ -1821,7 +2344,388 @@
       chatInput.value='';
     }
 
-    console.log('Frontend pronto — YouTube integrado (sem modal) e botão "Mudar vídeo" com confirmação implementado.');
+    // wire up some remaining handlers from part2: timeupdate etc.
+    video.addEventListener('timeupdate', updateProgressUI);
+    video.addEventListener('loadedmetadata', ()=> {
+      durationEl.textContent = fmtTime(video.duration);
+      updateProgressUI();
+      updatePlayPauseUI();
+    });
+    video.addEventListener('play', ()=> { updatePlayPauseUI(); sendControl(true); });
+    video.addEventListener('pause', ()=> { updatePlayPauseUI(); sendControl(false); });
+    video.addEventListener('seeked', ()=> { updateProgressUI(); sendControl(!video.paused); });
+
+    // important: keep change button visible even if ended
+    video.addEventListener('ended', ()=> {
+      // do not hide the change button; keep it visible because video still "exists"
+      updatePlayPauseUI();
+      showChangeBtn(true);
+    });
+
+    videoInner.addEventListener('mousemove', (e)=>{ showControlsTemporarily(); });
+    videoInner.addEventListener('touchstart', ()=> showControlsTemporarily());
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && document.activeElement !== chatInput && document.activeElement.tagName.toLowerCase() !== 'input') {
+        e.preventDefault();
+        togglePlay();
+      }
+    });
+
+    // -------------------------
+    // Misc: react to server-provided lobby updates (example)
+    // -------------------------
+    socket.on('room-update', (r) => {
+      if (!r || (!r.name && !r.room)) return;
+      addOrUpdateRoom(r);
+    });
+
+    socket.on('announce-room-created', (r) => {
+      if (!r) return;
+      addOrUpdateRoom(r);
+    });
+
+    // Open lobby automatically on every page load (per your request)
+    window.addEventListener('load', () => {
+      try {
+        lobbyOverlay.style.display = 'flex';
+        lobbyOverlay.setAttribute('aria-hidden','false');
+        setTimeout(()=> {
+          try { lobbySearch.focus(); } catch(e){}
+        }, 120);
+        try { socket.emit('list-rooms'); } catch(e){}
+      } catch (err) { /* ignore */ }
+    });
+
+    // -------------------------
+    // Additional behaviour: reveal/hide app and return button logic + volume control wiring
+    // -------------------------
+    (function(){
+      let inRoom = false;
+
+      function revealAppForRoom() {
+        inRoom = true;
+        window.__sync_in_room = true;
+        try {
+          appRoot.classList.remove('initial-hidden');
+          appRoot.classList.add('revealed');
+          // show return button beside create room in header (do not fix by default)
+          if (returnToRoomBtn) {
+            returnToRoomBtn.style.display = 'inline-flex';
+            returnToRoomBtn.classList.remove('return-fixed');
+          }
+          // ensure fechar button visible when in-room
+          if (fecharBtn) {
+            fecharBtn.style.display = 'inline-flex';
+          }
+        } catch(e){}
+      }
+
+      // attach to global so other flows can call if necessary
+      window.revealAppForRoom = revealAppForRoom;
+
+      // If user already created/entered by other means, reveal
+      // (handlers above call revealAppForRoom when create/join confirm are clicked)
+
+      // When opening the lobby while in room, ensure return button visible near create (not fixed)
+      if (openLobbyBtn) {
+        openLobbyBtn.addEventListener('click', () => {
+          if (inRoom && returnToRoomBtn) {
+            returnToRoomBtn.style.display = 'inline-flex';
+            returnToRoomBtn.classList.remove('return-fixed');
+          }
+          if (inRoom && fecharBtn) {
+            fecharBtn.style.display = 'inline-flex';
+          }
+        });
+      }
+
+      // close (return) button should hide overlay but remain visible in header only if in-room
+      if (returnToRoomBtn) {
+        returnToRoomBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          try {
+            lobbyOverlay.style.display = 'none';
+            lobbyOverlay.setAttribute('aria-hidden','true');
+            // if not in room (shouldn't happen), hide the button
+            if (!inRoom) {
+              returnToRoomBtn.style.display = 'none';
+              returnToRoomBtn.classList.remove('return-fixed');
+            }
+          } catch(e){}
+        });
+      }
+
+      // VOLUME control wiring
+      function setVolumeUIIcon(v) {
+        try {
+          const volIconMain = document.getElementById('volIcon');
+          if (volIconMain) {
+            if (v === 0) {
+              // novo SVG de mutado: alto-falante com X (mais claro)
+              volIconMain.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M17 9l4 4M21 9l-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
+            } else if (v <= 40) {
+              volIconMain.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/>';
+            } else {
+              volIconMain.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M16.5 7.5c.9 1 1.5 2.4 1.5 4.5s-.6 3.5-1.5 4.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/>';
+            }
+          }
+          const small = volumeBtn && volumeBtn.querySelector('svg');
+          if (small) {
+            if (v === 0) {
+              // small equalizer + clear X overlay
+              small.innerHTML = '<rect x="4" y="10" width="3" height="8" rx="1" fill="currentColor"></rect><rect x="10.5" y="7" width="3" height="11" rx="1" fill="currentColor"></rect><rect x="17" y="4" width="3" height="14" rx="1" fill="currentColor"></rect><path d="M6 8 L18 20 M18 8 L6 20" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>';
+            } else {
+              // normal equalizer bars
+              small.innerHTML = '<rect x="4" y="10" width="3" height="8" rx="1" fill="currentColor"></rect><rect x="10.5" y="7" width="3" height="11" rx="1" fill="currentColor"></rect><rect x="17" y="4" width="3" height="14" rx="1" fill="currentColor"></rect>';
+            }
+          }
+        } catch(e){}
+      }
+
+      async function applyVolumeToPlayer(val /*0-100*/) {
+        try {
+          if (isYouTube && typeof ytPlayer !== 'undefined' && ytPlayer && typeof ytPlayer.setVolume === 'function') {
+            try { ytPlayer.setVolume(Number(val)); } catch(e){}
+            if (Number(val) > 0 && ytPlayer.isMuted && typeof ytPlayer.isMuted === 'function' && ytPlayer.isMuted()) {
+              try { ytPlayer.unMute(); } catch(e){}
+            }
+          } else if (typeof video !== 'undefined' && video) {
+            video.volume = Math.max(0, Math.min(1, Number(val) / 100));
+            if (video.muted && video.volume > 0) video.muted = false;
+          }
+          setVolumeUIIcon(Number(val));
+        } catch(e){}
+      }
+
+      // ---- Volume menu portal + posicionamento robusto ----
+(function volumeMenuPortal(){
+  let repositionHandler = null;
+
+  function calcAndPlaceMenu() {
+    if (!volumeBtn || !volumeMenu) return;
+    const btnRect = volumeBtn.getBoundingClientRect();
+    // When hidden, offsetHeight may be 0 — use a sensible default
+    const menuHeight = Math.max(volumeMenu.offsetHeight, 120);
+    const menuWidth = Math.max(volumeMenu.offsetWidth, 170);
+    const margin = 8;
+
+    // If inside fullscreen, position relative to fullscreen element and append there (absolute)
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement || null;
+    if (fsEl) {
+      const fsRect = fsEl.getBoundingClientRect();
+      const spaceBelow = fsRect.bottom - btnRect.bottom;
+      const spaceAbove = btnRect.top - fsRect.top;
+
+      let top;
+      // PREFER above; fallback to below when not enough space above
+      if (spaceAbove >= menuHeight + margin || spaceAbove >= spaceBelow) {
+        // open above (relative to fullscreen)
+        top = Math.max(margin, btnRect.top - fsRect.top - menuHeight - margin);
+        volumeMenu.classList.add('above');
+      } else {
+        // open below
+        top = Math.min(fsRect.height - menuHeight - margin, btnRect.bottom - fsRect.top + margin);
+        volumeMenu.classList.remove('above');
+      }
+
+      // center horizontally over the button but clamp to fullscreen bounds
+      let left = btnRect.left - fsRect.left + (btnRect.width / 2) - (menuWidth / 2);
+      left = Math.min(Math.max(margin, left), fsRect.width - menuWidth - margin);
+
+      // convert to absolute coords relative to fsEl
+      volumeMenu.style.position = 'absolute';
+      volumeMenu.style.left = Math.round(left) + 'px';
+      volumeMenu.style.top = Math.round(top) + 'px';
+
+      // ensure appended to fullscreen element
+      try {
+        if (volumeMenu.parentElement !== fsEl) {
+          fsEl.appendChild(volumeMenu);
+        }
+      } catch (e) {
+        // fallback: append to body and use fixed positioning as backup
+        if (volumeMenu.parentElement !== document.body) document.body.appendChild(volumeMenu);
+        volumeMenu.style.position = 'fixed';
+      }
+
+      return;
+    }
+
+    // Normal (not fullscreen): append to body and position fixed relative to viewport
+    const spaceBelow = window.innerHeight - btnRect.bottom;
+    const spaceAbove = btnRect.top;
+
+    let top;
+    // PREFER above; fallback to below when not enough space above
+    if (spaceAbove >= menuHeight + margin || spaceAbove >= spaceBelow) {
+      // abrir acima
+      top = Math.max(margin, btnRect.top - menuHeight - margin);
+      volumeMenu.classList.add('above');
+    } else {
+      // abrir abaixo
+      top = Math.min(window.innerHeight - menuHeight - margin, btnRect.bottom + margin);
+      volumeMenu.classList.remove('above');
+    }
+
+    // center horizontally over the button and clamp to viewport
+    const left = Math.min(Math.max(margin, btnRect.left + (btnRect.width / 2) - (menuWidth / 2)), window.innerWidth - menuWidth - margin);
+
+    // ensure appended to body for fixed positioning
+    if (volumeMenu.parentElement !== document.body) {
+      try { document.body.appendChild(volumeMenu); } catch(e){}
+    }
+    volumeMenu.style.position = 'fixed';
+    volumeMenu.style.left = Math.round(left) + 'px';
+    volumeMenu.style.top = Math.round(top) + 'px';
+  }
+
+  // export calcAndPlaceMenu for external callers (resize fallback)
+  window.calcAndPlaceMenu = calcAndPlaceMenu;
+
+  function openVolumeMenu() {
+    try {
+      if (!volumeMenu || !volumeBtn) return;
+
+      // ensure slider reflects current volume
+      try {
+        let currentVol = 100;
+        if (isYouTube && ytPlayer && typeof ytPlayer.getVolume === 'function') {
+          currentVol = Number(ytPlayer.getVolume && ytPlayer.getVolume()) || currentVol;
+        } else if (video) {
+          currentVol = Math.round((video.volume || 1) * 100);
+        }
+        if (volumeSlider) volumeSlider.value = Math.max(0, Math.min(100, currentVol));
+        setVolumeUIIcon(Number(volumeSlider ? volumeSlider.value : currentVol));
+      } catch(e){}
+
+      // calcular e posicionar
+      calcAndPlaceMenu();
+
+      // mostrar
+      volumeMenu.classList.add('visible');
+      volumeMenu.setAttribute('aria-hidden', 'false');
+      volumeBtn.setAttribute('aria-expanded', 'true');
+
+      // handlers para fechar fora e tecla esc
+      document.addEventListener('click', onDocClickCloseVolume);
+      document.addEventListener('keydown', onDocKeyCloseVolume);
+
+      // reposicionar ao redimensionar / scroll (mantém o menu alinhado ao botão)
+      repositionHandler = () => { calcAndPlaceMenu(); };
+      window.addEventListener('resize', repositionHandler);
+      window.addEventListener('scroll', repositionHandler, true); // true para capturar scrolls em ancestors
+
+    } catch (e) { console.warn('openVolumeMenu error', e); }
+  }
+
+  function closeVolumeMenu() {
+    try {
+      if (!volumeMenu) return;
+      volumeMenu.classList.remove('visible');
+      volumeMenu.classList.remove('above');
+      volumeMenu.setAttribute('aria-hidden', 'true');
+      volumeBtn.setAttribute('aria-expanded', 'false');
+
+      document.removeEventListener('click', onDocClickCloseVolume);
+      document.removeEventListener('keydown', onDocKeyCloseVolume);
+
+      if (repositionHandler) {
+        window.removeEventListener('resize', repositionHandler);
+        window.removeEventListener('scroll', repositionHandler, true);
+        repositionHandler = null;
+      }
+    } catch (e) { console.warn('closeVolumeMenu error', e); }
+  }
+
+  function toggleVolumeMenu(e) {
+    try {
+      e.stopPropagation();
+      if (!volumeMenu) return;
+      if (volumeMenu.classList.contains('visible')) closeVolumeMenu();
+      else openVolumeMenu();
+    } catch (e) { console.warn('toggleVolumeMenu', e); }
+  }
+
+  function onDocClickCloseVolume(ev) {
+    try {
+      // se o clique NÃO for nem no botão nem no menu, fechar
+      // note: if menu is appended to fullscreen element, volumeMenu.contains still works
+      if (!volumeBtn.contains(ev.target) && !volumeMenu.contains(ev.target)) {
+        closeVolumeMenu();
+      }
+    } catch (e) { }
+  }
+  function onDocKeyCloseVolume(ev) {
+    try { if (ev.key === 'Escape') closeVolumeMenu(); } catch (e) { }
+  }
+
+  // export to outer scope (replaces previous function names)
+  window.openVolumeMenu = openVolumeMenu;
+  window.closeVolumeMenu = closeVolumeMenu;
+  window.toggleVolumeMenu = toggleVolumeMenu;
+  window.onDocClickCloseVolume = onDocClickCloseVolume;
+  window.onDocKeyCloseVolume = onDocKeyCloseVolume;
+})();
+
+      // Keep vol icon synced when mute toggled (existing muteBtn handler exists)
+      if (muteBtn) {
+        // single unified handler (was previously duplicated). This toggles mute for both YT and <video>,
+        // updates the UI icons and keeps the slider in sync.
+        muteBtn.addEventListener('click', (ev) => {
+          try {
+            if (isYouTube && ytPlayer && typeof ytPlayer.isMuted === 'function') {
+              if (ytPlayer.isMuted()) { ytPlayer.unMute(); }
+              else { ytPlayer.mute(); }
+              const vol = (ytPlayer.getVolume && ytPlayer.getVolume()) || (volumeSlider ? Number(volumeSlider.value) : 100);
+              setVolumeUIIcon(Number(vol));
+              if (volumeSlider) volumeSlider.value = Math.max(0, Math.min(100, Number(vol)));
+            } else if (video) {
+              video.muted = !video.muted;
+              const vol = video.muted ? 0 : Math.round((video.volume||1)*100);
+              setVolumeUIIcon(vol);
+              if (volumeSlider) { volumeSlider.value = vol; }
+            }
+          } catch(e){}
+        });
+      }
+
+      // expose reveal for external usage
+      window.__syncwave_revealApp = revealAppForRoom;
+    })();
+
+    console.log('Frontend pronto — Lobby FULLSCREEN implementado e evento de criação reforçado.');
+
+    // ---- Additional event bindings for volume control and quality button ----
+    // bind the volume button to the toggle function (ensures menu opens correctly)
+    try {
+      if (volumeBtn) volumeBtn.addEventListener('click', (e)=> window.toggleVolumeMenu(e));
+    } catch(e){}
+
+    // volume slider update handler (applies immediately)
+    try {
+      if (volumeSlider) {
+        volumeSlider.addEventListener('input', (ev) => {
+          try { applyVolumeToPlayer(Number(ev.target.value)); } catch(e){}
+        });
+      }
+    } catch(e){}
+
+    // quality menu toggle binding (if exists)
+    try {
+      if (qualityBtn) qualityBtn.addEventListener('click', toggleQualityMenu);
+    } catch(e){}
+
+    // Ensure window resize updates position if menu open
+    window.addEventListener('resize', () => {
+      try {
+        if (volumeMenu && volumeMenu.classList.contains('visible')) {
+          // recalc position using exported function
+          if (window.calcAndPlaceMenu) window.calcAndPlaceMenu();
+        }
+      } catch(e){}
+    });
+
   </script>
 </body>
 </html>
