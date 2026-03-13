@@ -10,7 +10,8 @@ const axios = require("axios");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+// permitindo CORS básico pro Socket.IO (útil em dev / testes)
+const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
 
 // ---------- YouTube API key (fictícia que você pediu para incluir) ----------
 // ATENÇÃO: em produção prefira usar process.env.YT_API_KEY e NÃO expor a chave no frontend.
@@ -51,6 +52,9 @@ app.locals.rooms = app.locals.rooms || {};         // room -> string (videoPath)
 app.locals.roomsState = app.locals.roomsState || {}; // room -> { time, playing, ts }
 app.locals.chatHistory = app.locals.chatHistory || {}; // room -> [messages]
 
+// NEW: informações exibidas no LOBBY (name, owner, hasPassword, users, createdAt, preview)
+app.locals.roomInfos = app.locals.roomInfos || {}; // room -> { name, owner, hasPassword, users, createdAt, preview }
+
 // ---------- helpers ----------
 function sanitizeText(t){
   if (!t) return "";
@@ -70,6 +74,37 @@ function getLocalIPs() {
   return results;
 }
 
+// ---------- New helper: robust room name extraction ----------
+function getRoomName(payload) {
+  if (!payload) return "";
+  if (typeof payload === "string") return payload.trim();
+  if (typeof payload === "object") {
+    // aceita várias formas: { room }, { name }, { roomName }, { id }
+    const candidate =
+      (typeof payload.room === "string" && payload.room) ||
+      (typeof payload.name === "string" && payload.name) ||
+      (typeof payload.roomName === "string" && payload.roomName) ||
+      (typeof payload.id === "string" && payload.id) ||
+      "";
+    if (candidate && String(candidate).trim()) return String(candidate).trim();
+
+    // se payload.room for objeto (ex: { room: { name: 'x' }})
+    if (payload.room && typeof payload.room === "object") {
+      const inner = payload.room.name || payload.room.id || "";
+      if (inner && String(inner).trim()) return String(inner).trim();
+    }
+    // fallback: try to coerce any other likely fields
+    if (payload && payload.name) return String(payload.name).trim();
+    if (payload && payload.room) return String(payload.room).trim();
+    if (payload && payload.toString) {
+      const s = payload.toString();
+      if (s && s !== "[object Object]") return s.trim();
+    }
+    return "";
+  }
+  return String(payload).trim();
+}
+
 // ---------- upload endpoints ----------
 app.post("/upload/:room", (req, res, next) => {
   upload.single("video")(req, res, (err) => {
@@ -83,6 +118,20 @@ app.post("/upload/:room", (req, res, next) => {
     // store as string (legacy behavior for direct uploads)
     app.locals.rooms[room] = videoPath;
     console.log("✅ Upload salvo:", videoPath, "para sala:", room);
+
+    // Atualiza preview no registry do lobby
+    app.locals.roomInfos[room] = app.locals.roomInfos[room] || {
+      name: room,
+      owner: null,
+      hasPassword: false,
+      users: io.sockets.adapter.rooms.get(room)?.size || 0,
+      createdAt: Date.now(),
+      preview: null
+    };
+    app.locals.roomInfos[room].preview = videoPath;
+    // notifica todos que a sala foi atualizada (tem preview agora)
+    io.emit("room-updated", app.locals.roomInfos[room]);
+
     // notify room (clients expect 'video-ready' with same payload shape)
     io.to(room).emit("video-ready", videoPath);
     return res.json({ success: true, video: videoPath });
@@ -104,6 +153,19 @@ app.post("/upload", (req, res, next) => {
     const videoPath = `/videos/${req.file.filename}`;
     app.locals.rooms[room] = videoPath;
     console.log("✅ Upload salvo:", videoPath, "para sala:", room);
+
+    // Atualiza preview / registry
+    app.locals.roomInfos[room] = app.locals.roomInfos[room] || {
+      name: room,
+      owner: null,
+      hasPassword: false,
+      users: io.sockets.adapter.rooms.get(room)?.size || 0,
+      createdAt: Date.now(),
+      preview: null
+    };
+    app.locals.roomInfos[room].preview = videoPath;
+    io.emit("room-updated", app.locals.roomInfos[room]);
+
     io.to(room).emit("video-ready", videoPath);
     return res.json({ success: true, video: videoPath });
   });
@@ -111,6 +173,19 @@ app.post("/upload", (req, res, next) => {
 
 // health
 app.get("/health", (req, res) => res.json({ ok: true }));
+
+// rota para listar salas via HTTP (útil pra debug / fetch)
+app.get("/rooms", (req, res) => {
+  const arr = Object.values(app.locals.roomInfos || {}).map(info => ({
+    name: info.name,
+    owner: info.owner,
+    hasPassword: !!info.hasPassword,
+    users: info.users || 0,
+    createdAt: info.createdAt || 0,
+    preview: info.preview || null
+  }));
+  res.json({ rooms: arr });
+});
 
 // ---------- YouTube Data API helper (server-side) ----------
 async function fetchYouTubeMetaServer(id) {
@@ -131,7 +206,6 @@ async function fetchYouTubeMetaServer(id) {
       embeddable: typeof it.status?.embeddable === "boolean" ? !!it.status.embeddable : true,
     };
   } catch (err) {
-    // normalize axios error messages
     const m = (err && err.response && err.response.data) ? JSON.stringify(err.response.data) : (err && err.message ? err.message : String(err));
     throw new Error("YouTube API error: " + m);
   }
@@ -145,46 +219,134 @@ io.on("connection", (socket) => {
   socket._chatRate = { lastTs: 0, windowStart: Date.now(), count: 0 };
 
   // create-room: host explicitly creates a room
-  socket.on("create-room", (room) => {
-    if (!room) return;
-    socket.join(room);
-    console.log(`👑 ${socket.id} criou a sala ${room}`);
-    app.locals.roomsState[room] = app.locals.roomsState[room] || { time: 0, playing: false, ts: Date.now() };
-    // if there is already a video (file or youtube object), send it
-    if (app.locals.rooms[room]) socket.emit("video-ready", app.locals.rooms[room]);
-    socket.emit("sync", app.locals.roomsState[room]);
-    // send chat history
-    socket.emit("chat-history", app.locals.chatHistory[room] || []);
-    // emit count
-    const size = io.sockets.adapter.rooms.get(room)?.size || 0;
-    io.in(room).emit("room-count", size);
+  socket.on("create-room", (payload) => {
+    try {
+      const roomName = getRoomName(payload);
+      if (!roomName) {
+        console.warn("create-room recebido sem room válido:", payload);
+        return;
+      }
+      // host pode vir no payload (payload.host) ou fallback para socket.id
+      const host = payload && payload.host ? String(payload.host).slice(0,40) : socket.id;
+
+      socket.join(roomName);
+      console.log(`👑 ${socket.id} criou a sala ${roomName}`);
+      app.locals.roomsState[roomName] = app.locals.roomsState[roomName] || { time: 0, playing: false, ts: Date.now() };
+
+      // atualiza preview caso já tenha video no server (string path ou object youtube)
+      const preview = app.locals.rooms[roomName] || null;
+
+      // atualizar registry do lobby
+      app.locals.roomInfos[roomName] = app.locals.roomInfos[roomName] || {
+        name: roomName,
+        owner: host,
+        hasPassword: !!(payload && payload.password),
+        users: io.sockets.adapter.rooms.get(roomName)?.size || 0,
+        createdAt: Date.now(),
+        preview
+      };
+
+      // envia video / sync / chatHistory só pro criador (mantém seu comportamento)
+      if (app.locals.rooms[roomName]) socket.emit("video-ready", app.locals.rooms[roomName]);
+      socket.emit("sync", app.locals.roomsState[roomName]);
+      socket.emit("chat-history", app.locals.chatHistory[roomName] || []);
+
+      // atualizar contagem e enviar updates:
+      const size = io.sockets.adapter.rooms.get(roomName)?.size || 0;
+      app.locals.roomInfos[roomName].users = size;
+      io.in(roomName).emit("room-count", size);
+
+      // **IMPORTANTE**: notifique o LOBBY — broadcast para todos sockets que uma sala foi criada/atualizada
+      io.emit("room-created", {
+        name: app.locals.roomInfos[roomName].name,
+        owner: app.locals.roomInfos[roomName].owner,
+        hasPassword: !!app.locals.roomInfos[roomName].hasPassword,
+        users: app.locals.roomInfos[roomName].users,
+        createdAt: app.locals.roomInfos[roomName].createdAt,
+        preview: app.locals.roomInfos[roomName].preview || null
+      });
+    } catch (err) {
+      console.error("Erro em create-room:", err);
+    }
   });
 
   // join-room: join & receive current video + state + history
-  socket.on("join-room", (room) => {
-    if (!room) return;
-    socket.join(room);
-    console.log(`👥 ${socket.id} entrou em ${room}`);
-    if (app.locals.rooms[room]) socket.emit("video-ready", app.locals.rooms[room]);
-    if (app.locals.roomsState[room]) socket.emit("sync", app.locals.roomsState[room]);
-    socket.emit("chat-history", app.locals.chatHistory[room] || []);
-    const size = io.sockets.adapter.rooms.get(room)?.size || 0;
-    io.in(room).emit("room-count", size);
+  socket.on("join-room", (payload, maybeAck) => {
+    try {
+      // payload pode ser string ou objeto { room, password, user }
+      const roomName = getRoomName(payload);
+      if (!roomName) {
+        console.warn("join-room recebido sem room válido:", payload);
+        if (typeof maybeAck === "function") maybeAck({ ok: false, error: "room inválida" });
+        return;
+      }
+      socket.join(roomName);
+      console.log(`👥 ${socket.id} entrou em ${roomName}`);
+
+      if (app.locals.rooms[roomName]) socket.emit("video-ready", app.locals.rooms[roomName]);
+      if (app.locals.roomsState[roomName]) socket.emit("sync", app.locals.roomsState[roomName]);
+      socket.emit("chat-history", app.locals.chatHistory[roomName] || []);
+      const size = io.sockets.adapter.rooms.get(roomName)?.size || 0;
+
+      app.locals.roomInfos[roomName] = app.locals.roomInfos[roomName] || {
+        name: roomName,
+        owner: null,
+        hasPassword: false,
+        users: size,
+        createdAt: Date.now(),
+        preview: app.locals.rooms[roomName] || null
+      };
+      app.locals.roomInfos[roomName].users = size;
+
+      // informe participantes da sala
+      io.in(roomName).emit("room-count", size);
+
+      // informe o lobby (outros clientes)
+      io.emit("room-updated", {
+        name: app.locals.roomInfos[roomName].name,
+        owner: app.locals.roomInfos[roomName].owner,
+        hasPassword: !!app.locals.roomInfos[roomName].hasPassword,
+        users: app.locals.roomInfos[roomName].users,
+        createdAt: app.locals.roomInfos[roomName].createdAt,
+        preview: app.locals.roomInfos[roomName].preview || null
+      });
+
+      if (typeof maybeAck === "function") maybeAck({ ok: true });
+    } catch (err) {
+      console.error("Erro em join-room:", err);
+      if (typeof maybeAck === "function") maybeAck({ ok: false, error: String(err) });
+    }
+  });
+
+  // permite que o cliente peça a lista de salas a qualquer momento
+  socket.on("list-rooms", () => {
+    const arr = Object.values(app.locals.roomInfos || {}).map(info => ({
+      name: info.name,
+      owner: info.owner,
+      hasPassword: !!info.hasPassword,
+      users: info.users || 0,
+      createdAt: info.createdAt || 0,
+      preview: info.preview || null
+    }));
+    socket.emit("room-list", arr);
   });
 
   // NEW: youtube event -> validate server-side then store as { youtube: id, meta } and broadcast to room
-  // supports optional callback ack as second arg
   socket.on("youtube", async (payload, ack) => {
     try {
       if (!payload || !payload.room) {
         if (typeof ack === 'function') ack({ ok: false, error: "payload.room ausente" });
         return;
       }
-      const room = String(payload.room);
+      const room = getRoomName(payload);
+      if (!room) {
+        if (typeof ack === 'function') ack({ ok: false, error: "room inválida" });
+        return;
+      }
+
       const rawId = (payload.id || payload.youtube || "").toString().trim();
-      // Extract basic ID shape: prefer 11 chars, but be flexible and try to sanitize
       const id = rawId.length === 11 ? rawId : (rawId.split(/[?&]/)[0] || rawId);
-      if (!id || id.length < 8) { // very permissive check; real validation below via API
+      if (!id || id.length < 8) {
         console.log("⚠️ youtube emit inválido de", socket.id, payload);
         if (typeof ack === 'function') ack({ ok: false, error: "ID inválido" });
         return;
@@ -208,10 +370,23 @@ io.on("connection", (socket) => {
       // store object so new joiners get same shape
       app.locals.rooms[room] = { youtube: id, meta };
 
+      // update preview in registry
+      app.locals.roomInfos[room] = app.locals.roomInfos[room] || {
+        name: room,
+        owner: null,
+        hasPassword: false,
+        users: io.sockets.adapter.rooms.get(room)?.size || 0,
+        createdAt: Date.now(),
+        preview: null
+      };
+      app.locals.roomInfos[room].preview = { youtube: id, meta };
+
       // broadcast to room
       io.to(room).emit("video-ready", { youtube: id, meta });
-      // also emit a convenience 'youtube' event (your client listens to this too)
       io.to(room).emit("youtube", { id, room, from: socket.id, meta });
+
+      // inform lobby about update
+      io.emit("room-updated", app.locals.roomInfos[room]);
 
       console.log(`▶️ YouTube ${id} validado e enviado para sala ${room} por ${socket.id}`);
 
@@ -224,19 +399,24 @@ io.on("connection", (socket) => {
 
   // control: unified control from clients -> server marks ts and broadcasts authoritative sync
   socket.on("control", ({ room, time, playing }) => {
-    if (!room) return;
-    const ts = Date.now();
-    app.locals.roomsState[room] = { time: Number(time) || 0, playing: !!playing, ts };
-    io.in(room).emit("sync", app.locals.roomsState[room]);
-    console.log(`📡 control from ${socket.id} for ${room} => time=${time}, playing=${playing}, ts=${ts}`);
+    try {
+      const roomName = getRoomName(room || {});
+      if (!roomName) return;
+      const ts = Date.now();
+      app.locals.roomsState[roomName] = { time: Number(time) || 0, playing: !!playing, ts };
+      io.in(roomName).emit("sync", app.locals.roomsState[roomName]);
+      console.log(`📡 control from ${socket.id} for ${roomName} => time=${time}, playing=${playing}, ts=${ts}`);
+    } catch (err) {
+      console.error("Erro em control handler:", err);
+    }
   });
 
   // chat-message with simple rate limit & sanitization
   socket.on("chat-message", (payload) => {
     try {
       if (!payload || !payload.room || !payload.text) return;
-      const room = payload.room;
-      // rate limit: max 12 messages per 10 seconds per socket
+      const room = getRoomName(payload.room);
+      if (!room) return;
       const now = Date.now();
       const rate = socket._chatRate;
       if (now - rate.windowStart > 10000) { rate.windowStart = now; rate.count = 0; }
@@ -268,19 +448,37 @@ io.on("connection", (socket) => {
   });
 
   // clear-chat (authorized only if needed - here open)
-  socket.on("clear-chat", (room) => {
-    if (!room) return;
-    app.locals.chatHistory[room] = [];
-    io.in(room).emit("chat-cleared");
+  socket.on("clear-chat", (roomPayload) => {
+    try {
+      const room = getRoomName(roomPayload);
+      if (!room) return;
+      app.locals.chatHistory[room] = [];
+      io.in(room).emit("chat-cleared");
+    } catch (err) {
+      console.error("Erro clear-chat:", err);
+    }
   });
 
-  // update room counts on disconnecting
+  // update room counts on disconnecting and clean empty rooms from roomInfos
   socket.on("disconnecting", () => {
     const rooms = Array.from(socket.rooms || []).filter(r => r !== socket.id);
     rooms.forEach(r => {
       setImmediate(() => {
         const size = io.sockets.adapter.rooms.get(r)?.size || 0;
+        // atualiza users
+        if (app.locals.roomInfos[r]) app.locals.roomInfos[r].users = size;
         io.in(r).emit("room-count", size);
+
+        // se zero usuários, remova a sala do registry e notifique o lobby
+        if (size === 0 && app.locals.roomInfos[r]) {
+          const removed = app.locals.roomInfos[r];
+          delete app.locals.roomInfos[r];
+          // Notifica lobby que a sala foi removida
+          io.emit("room-removed", { name: r, removedAt: Date.now(), preview: removed.preview || null });
+        } else {
+          // se ainda existe gente, notifique atualização
+          if (app.locals.roomInfos[r]) io.emit("room-updated", app.locals.roomInfos[r]);
+        }
       });
     });
   });
