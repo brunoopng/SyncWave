@@ -14,7 +14,6 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
 
 // ---------- YouTube API key (fictícia que você pediu para incluir) ----------
-// ATENÇÃO: em produção prefira usar process.env.YT_API_KEY e NÃO expor a chave no frontend.
 const YT_API_KEY = process.env.YT_API_KEY || "AIzaSyDSWsuBjVjknRxnz6GHPMWlnTwFSAsTUf4";
 
 // ---------- uploads dir ----------
@@ -51,8 +50,6 @@ app.use(express.urlencoded({ extended: true }));
 app.locals.rooms = app.locals.rooms || {};         // room -> string (videoPath) OR object { youtube: id, meta }
 app.locals.roomsState = app.locals.roomsState || {}; // room -> { time, playing, ts }
 app.locals.chatHistory = app.locals.chatHistory || {}; // room -> [messages]
-
-// NEW: informações exibidas no LOBBY (name, owner, hasPassword, users, createdAt, preview)
 app.locals.roomInfos = app.locals.roomInfos || {}; // room -> { name, owner, hasPassword, users, createdAt, preview }
 
 // ---------- helpers ----------
@@ -74,12 +71,11 @@ function getLocalIPs() {
   return results;
 }
 
-// ---------- New helper: robust room name extraction ----------
+// robust room name extraction
 function getRoomName(payload) {
   if (!payload) return "";
   if (typeof payload === "string") return payload.trim();
   if (typeof payload === "object") {
-    // aceita várias formas: { room }, { name }, { roomName }, { id }
     const candidate =
       (typeof payload.room === "string" && payload.room) ||
       (typeof payload.name === "string" && payload.name) ||
@@ -88,12 +84,10 @@ function getRoomName(payload) {
       "";
     if (candidate && String(candidate).trim()) return String(candidate).trim();
 
-    // se payload.room for objeto (ex: { room: { name: 'x' }})
     if (payload.room && typeof payload.room === "object") {
       const inner = payload.room.name || payload.room.id || "";
       if (inner && String(inner).trim()) return String(inner).trim();
     }
-    // fallback: try to coerce any other likely fields
     if (payload && payload.name) return String(payload.name).trim();
     if (payload && payload.room) return String(payload.room).trim();
     if (payload && payload.toString) {
@@ -103,6 +97,43 @@ function getRoomName(payload) {
     return "";
   }
   return String(payload).trim();
+}
+
+// push system chat (join/leave)
+function pushSystemChat(room, type, user, text) {
+  try {
+    if (!room) return;
+    const username = sanitizeText(user) || `Convidado`;
+    const msg = {
+      id: Date.now() + "-" + Math.random().toString(36).slice(2,8),
+      user: username,
+      text: text || `${username} ${type === 'join' ? 'entrou' : 'saiu'} da sala`,
+      ts: Date.now(),
+      system: true,
+      type
+    };
+    app.locals.chatHistory[room] = app.locals.chatHistory[room] || [];
+    app.locals.chatHistory[room].push(msg);
+    if (app.locals.chatHistory[room].length > 300) app.locals.chatHistory[room].shift();
+    // envia para todos na sala
+    io.in(room).emit("chat-message", msg);
+  } catch (err) {
+    console.warn("pushSystemChat failed", err);
+  }
+}
+
+// helper: broadcast current rooms-list (both event names for compatibility)
+function broadcastRoomsList() {
+  const arr = Object.values(app.locals.roomInfos || {}).map(info => ({
+    name: info.name,
+    owner: info.owner,
+    hasPassword: !!info.hasPassword,
+    users: info.users || 0,
+    createdAt: info.createdAt || 0,
+    preview: info.preview || null
+  }));
+  io.emit("rooms-list", arr);
+  io.emit("room-list", arr); // legacy / alternate name
 }
 
 // ---------- upload endpoints ----------
@@ -115,11 +146,9 @@ app.post("/upload/:room", (req, res, next) => {
     }
     const room = req.params.room;
     const videoPath = `/videos/${req.file.filename}`;
-    // store as string (legacy behavior for direct uploads)
     app.locals.rooms[room] = videoPath;
     console.log("✅ Upload salvo:", videoPath, "para sala:", room);
 
-    // Atualiza preview no registry do lobby
     app.locals.roomInfos[room] = app.locals.roomInfos[room] || {
       name: room,
       owner: null,
@@ -129,10 +158,9 @@ app.post("/upload/:room", (req, res, next) => {
       preview: null
     };
     app.locals.roomInfos[room].preview = videoPath;
-    // notifica todos que a sala foi atualizada (tem preview agora)
     io.emit("room-updated", app.locals.roomInfos[room]);
+    broadcastRoomsList();
 
-    // notify room (clients expect 'video-ready' with same payload shape)
     io.to(room).emit("video-ready", videoPath);
     return res.json({ success: true, video: videoPath });
   });
@@ -154,7 +182,6 @@ app.post("/upload", (req, res, next) => {
     app.locals.rooms[room] = videoPath;
     console.log("✅ Upload salvo:", videoPath, "para sala:", room);
 
-    // Atualiza preview / registry
     app.locals.roomInfos[room] = app.locals.roomInfos[room] || {
       name: room,
       owner: null,
@@ -165,6 +192,7 @@ app.post("/upload", (req, res, next) => {
     };
     app.locals.roomInfos[room].preview = videoPath;
     io.emit("room-updated", app.locals.roomInfos[room]);
+    broadcastRoomsList();
 
     io.to(room).emit("video-ready", videoPath);
     return res.json({ success: true, video: videoPath });
@@ -215,93 +243,182 @@ async function fetchYouTubeMetaServer(id) {
 io.on("connection", (socket) => {
   console.log("🔌 socket conectado:", socket.id);
 
-  // simple rate limiter per socket for chat: { lastTs, windowStart, count }
   socket._chatRate = { lastTs: 0, windowStart: Date.now(), count: 0 };
+  function getRoomMembers(room){
+  const set = io.sockets.adapter.rooms.get(room);
+  if (!set) return [];
+
+  const members = [];
+
+  for (const id of set) {
+    const s = io.sockets.sockets.get(id);
+    if (!s) continue;
+
+    members.push({
+      id,
+      name: s.data?.username || `Guest-${id.slice(0,6)}`,
+      status: "online"
+    });
+  }
+
+  return members;
+}
+
+// cliente pediu lista de membros
+socket.on("request_room_members", (payload) => {
+
+  const room = getRoomName(payload);
+
+  if (!room){
+    socket.emit("room_members", []);
+    return;
+  }
+
+  const members = getRoomMembers(room);
+
+  socket.emit("room_members", members);
+});
+
 
   // create-room: host explicitly creates a room
-  socket.on("create-room", (payload) => {
+  socket.on("create-room", (payload, maybeAck) => {
     try {
       const roomName = getRoomName(payload);
       if (!roomName) {
-        console.warn("create-room recebido sem room válido:", payload);
+        if (typeof maybeAck === "function") maybeAck({ ok: false, error: "Nome da sala inválido" });
         return;
       }
-      // host pode vir no payload (payload.host) ou fallback para socket.id
-      const host = payload && payload.host ? String(payload.host).slice(0,40) : socket.id;
+
+      const currentRooms = Array.from(socket.rooms).filter(r => r !== socket.id);
+      if (currentRooms.length > 0) {
+        if (typeof maybeAck === "function") maybeAck({ ok: false, error: "Você já está em uma sala. Saia antes de criar outra." });
+        return;
+      }
+
+      if (app.locals.roomInfos[roomName]) {
+        if (typeof maybeAck === "function") maybeAck({ ok: false, error: "Sala com esse nome já existe" });
+        return;
+      }
+
+      // host (owner id) field (kept for owner tracking)
+      const ownerId = payload && payload.host ? String(payload.host).slice(0, 40) : socket.id;
+
+      // Rastreia username (tolerante a vários campos)
+      const creatorName = sanitizeText(
+        (payload && (payload.username || payload.user || payload.name || payload.host || payload.owner || payload.ownerName))
+      ) || (`Host-${socket.id.slice(0,6)}`);
+      socket.data.username = creatorName;
 
       socket.join(roomName);
-      console.log(`👑 ${socket.id} criou a sala ${roomName}`);
-      app.locals.roomsState[roomName] = app.locals.roomsState[roomName] || { time: 0, playing: false, ts: Date.now() };
 
-      // atualiza preview caso já tenha video no server (string path ou object youtube)
+      console.log(`👑 ${socket.id} (${creatorName}) criou a sala ${roomName}`);
+
+      io.in(roomName).emit("room_members", getRoomMembers(roomName));
+      
+
+
+      app.locals.roomsState[roomName] = { time: 0, playing: false, ts: Date.now() };
+
       const preview = app.locals.rooms[roomName] || null;
 
-      // atualizar registry do lobby
-      app.locals.roomInfos[roomName] = app.locals.roomInfos[roomName] || {
+      app.locals.roomInfos[roomName] = {
         name: roomName,
-        owner: host,
-        hasPassword: !!(payload && payload.password),
+        owner: ownerId,
+        password: payload.password || null,
+        hasPassword: !!payload.password,
         users: io.sockets.adapter.rooms.get(roomName)?.size || 0,
         createdAt: Date.now(),
         preview
       };
 
-      // envia video / sync / chatHistory só pro criador (mantém seu comportamento)
+
       if (app.locals.rooms[roomName]) socket.emit("video-ready", app.locals.rooms[roomName]);
       socket.emit("sync", app.locals.roomsState[roomName]);
       socket.emit("chat-history", app.locals.chatHistory[roomName] || []);
 
-      // atualizar contagem e enviar updates:
+      // update size and registry
       const size = io.sockets.adapter.rooms.get(roomName)?.size || 0;
       app.locals.roomInfos[roomName].users = size;
+
+      // system message: creator created & joined
+      pushSystemChat(roomName, 'join', creatorName, `${creatorName} criou e entrou na sala`);
+
+      // broadcast room created/updated and lists (both event names)
+      io.emit("room-created", app.locals.roomInfos[roomName]);
+      io.emit("room-updated", app.locals.roomInfos[roomName]);
+      broadcastRoomsList();
+
+      // send room-count to participants
       io.in(roomName).emit("room-count", size);
 
-      // **IMPORTANTE**: notifique o LOBBY — broadcast para todos sockets que uma sala foi criada/atualizada
-      io.emit("room-created", {
-        name: app.locals.roomInfos[roomName].name,
-        owner: app.locals.roomInfos[roomName].owner,
-        hasPassword: !!app.locals.roomInfos[roomName].hasPassword,
-        users: app.locals.roomInfos[roomName].users,
-        createdAt: app.locals.roomInfos[roomName].createdAt,
-        preview: app.locals.roomInfos[roomName].preview || null
-      });
+      if (typeof maybeAck === "function") maybeAck({ ok: true, room: roomName });
+
     } catch (err) {
       console.error("Erro em create-room:", err);
+      if (typeof maybeAck === "function") maybeAck({ ok: false, error: String(err) });
     }
   });
 
   // join-room: join & receive current video + state + history
   socket.on("join-room", (payload, maybeAck) => {
     try {
-      // payload pode ser string ou objeto { room, password, user }
       const roomName = getRoomName(payload);
       if (!roomName) {
-        console.warn("join-room recebido sem room válido:", payload);
         if (typeof maybeAck === "function") maybeAck({ ok: false, error: "room inválida" });
         return;
       }
-      socket.join(roomName);
-      console.log(`👥 ${socket.id} entrou em ${roomName}`);
 
+      const otherRooms = Array.from(socket.rooms).filter(r => r !== socket.id);
+      if (otherRooms.length > 0) {
+        if (typeof maybeAck === "function") {
+          maybeAck({ ok: false, error: "Você já está em outra sala. Saia antes de entrar." });
+        }
+        return;
+      }
+
+      const roomInfo = app.locals.roomInfos[roomName];
+      if (!roomInfo) {
+        if (typeof maybeAck === "function") maybeAck({ ok: false, error: "Sala não existe" });
+        return;
+      }
+
+      if (roomInfo.hasPassword) {
+        if (!payload.password || payload.password !== roomInfo.password) {
+          if (typeof maybeAck === "function") maybeAck({ ok: false, error: "Senha incorreta" });
+          socket.emit("join-error", { error: "Senha incorreta" });
+          return;
+        }
+      }
+
+      // register username for this socket (tolerant)
+      const username = sanitizeText((payload && (payload.username || payload.user || payload.name || payload.host || payload.owner || payload.ownerName))) || (`Guest-${socket.id.slice(0,6)}`);
+      socket.data.username = username;
+
+      socket.join(roomName);
+      console.log(`👥 ${socket.id} (${username}) entrou em ${roomName}`);
+      io.in(roomName).emit("room_members", getRoomMembers(roomName));
+
+
+      // recompute size after join
+      const size = io.sockets.adapter.rooms.get(roomName)?.size || 0;
+      if (app.locals.roomInfos[roomName]) app.locals.roomInfos[roomName].users = size;
+
+      // atualizar lobby (ambos eventos)
+      io.emit("rooms-list", Object.values(app.locals.roomInfos));
+      io.emit("room-list", Object.values(app.locals.roomInfos));
+
+      // envia estado/vídeo/histórico para o novo participante
       if (app.locals.rooms[roomName]) socket.emit("video-ready", app.locals.rooms[roomName]);
       if (app.locals.roomsState[roomName]) socket.emit("sync", app.locals.roomsState[roomName]);
       socket.emit("chat-history", app.locals.chatHistory[roomName] || []);
-      const size = io.sockets.adapter.rooms.get(roomName)?.size || 0;
 
-      app.locals.roomInfos[roomName] = app.locals.roomInfos[roomName] || {
-        name: roomName,
-        owner: null,
-        hasPassword: false,
-        users: size,
-        createdAt: Date.now(),
-        preview: app.locals.rooms[roomName] || null
-      };
-      app.locals.roomInfos[roomName].users = size;
+      // registra e emite mensagem de sistema no chat (join)
+      pushSystemChat(roomName, 'join', username, `${username} entrou na sala`);
 
-      // informe participantes da sala
+      // informe participantes da sala com contagem atual (em tempo real)
       io.in(roomName).emit("room-count", size);
 
-      // informe o lobby (outros clientes)
+      // informe o lobby (outros clientes) sobre atualização
       io.emit("room-updated", {
         name: app.locals.roomInfos[roomName].name,
         owner: app.locals.roomInfos[roomName].owner,
@@ -310,6 +427,7 @@ io.on("connection", (socket) => {
         createdAt: app.locals.roomInfos[roomName].createdAt,
         preview: app.locals.roomInfos[roomName].preview || null
       });
+      broadcastRoomsList();
 
       if (typeof maybeAck === "function") maybeAck({ ok: true });
     } catch (err) {
@@ -318,7 +436,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // permite que o cliente peça a lista de salas a qualquer momento
+  // list-rooms (single-client request) -> emit both names for compatibility
   socket.on("list-rooms", () => {
     const arr = Object.values(app.locals.roomInfos || {}).map(info => ({
       name: info.name,
@@ -329,9 +447,10 @@ io.on("connection", (socket) => {
       preview: info.preview || null
     }));
     socket.emit("room-list", arr);
+    socket.emit("rooms-list", arr);
   });
 
-  // NEW: youtube event -> validate server-side then store as { youtube: id, meta } and broadcast to room
+  // youtube handler (unchanged semântica)
   socket.on("youtube", async (payload, ack) => {
     try {
       if (!payload || !payload.room) {
@@ -352,7 +471,6 @@ io.on("connection", (socket) => {
         return;
       }
 
-      // Validate/lookup metadata on server using YouTube Data API
       let meta;
       try {
         meta = await fetchYouTubeMetaServer(id);
@@ -367,10 +485,8 @@ io.on("connection", (socket) => {
         return;
       }
 
-      // store object so new joiners get same shape
       app.locals.rooms[room] = { youtube: id, meta };
 
-      // update preview in registry
       app.locals.roomInfos[room] = app.locals.roomInfos[room] || {
         name: room,
         owner: null,
@@ -381,12 +497,11 @@ io.on("connection", (socket) => {
       };
       app.locals.roomInfos[room].preview = { youtube: id, meta };
 
-      // broadcast to room
       io.to(room).emit("video-ready", { youtube: id, meta });
       io.to(room).emit("youtube", { id, room, from: socket.id, meta });
 
-      // inform lobby about update
       io.emit("room-updated", app.locals.roomInfos[room]);
+      broadcastRoomsList();
 
       console.log(`▶️ YouTube ${id} validado e enviado para sala ${room} por ${socket.id}`);
 
@@ -397,7 +512,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // control: unified control from clients -> server marks ts and broadcasts authoritative sync
+  // control
   socket.on("control", ({ room, time, playing }) => {
     try {
       const roomName = getRoomName(room || {});
@@ -411,7 +526,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // chat-message with simple rate limit & sanitization
+  // chat-message
   socket.on("chat-message", (payload) => {
     try {
       if (!payload || !payload.room || !payload.text) return;
@@ -425,7 +540,7 @@ io.on("connection", (socket) => {
         socket.emit("chat-error", { error: "Rate limit. Espere um pouco antes de enviar outra mensagem." });
         return;
       }
-      const user = payload.user ? String(payload.user).slice(0, 40) : "Guest";
+      const user = payload.user ? sanitizeText(payload.user).slice(0, 40) : (socket.data.username || `Guest-${socket.id.slice(0,6)}`);
       const text = sanitizeText(payload.text).slice(0, 800);
       if (!text) return;
 
@@ -447,7 +562,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // clear-chat (authorized only if needed - here open)
+  // clear-chat
   socket.on("clear-chat", (roomPayload) => {
     try {
       const room = getRoomName(roomPayload);
@@ -459,26 +574,109 @@ io.on("connection", (socket) => {
     }
   });
 
-  // update room counts on disconnecting and clean empty rooms from roomInfos
+  // leave-room
+  socket.on("leave-room", (roomName, ack) => {
+    if (!roomName) {
+      if (typeof ack === "function") ack({ ok: false, error: "room inválida" });
+      return;
+    }
+    const rn = getRoomName(roomName);
+    if (!rn) {
+      if (typeof ack === "function") ack({ ok: false, error: "room inválida" });
+      return;
+    }
+
+    console.log(`🚪 ${socket.id} (${socket.data.username || 'Guest'}) saiu de ${rn}`);
+
+    try {
+      const username = socket.data.username || `Guest-${socket.id.slice(0,6)}`;
+      const msg = {
+        id: Date.now() + "-" + Math.random().toString(36).slice(2,8),
+        user: sanitizeText(username),
+        text: `${username} saiu da sala`,
+        ts: Date.now(),
+        system: true,
+        type: 'leave'
+      };
+      app.locals.chatHistory[rn] = app.locals.chatHistory[rn] || [];
+      app.locals.chatHistory[rn].push(msg);
+      if (app.locals.chatHistory[rn].length > 300) app.locals.chatHistory[rn].shift();
+      socket.to(rn).emit("chat-message", msg);
+    } catch (e) {
+      console.warn("leave-room push chat failed", e);
+    }
+
+    socket.leave(rn);
+
+    setImmediate(() => {
+      const size = io.sockets.adapter.rooms.get(rn)?.size || 0;
+
+      io.in(rn).emit("room_members", getRoomMembers(rn));
+      
+
+      if (size === 0) {
+        console.log(`🗑 removendo sala vazia: ${rn}`);
+        delete app.locals.roomInfos[rn];
+        delete app.locals.rooms[rn];
+        delete app.locals.roomsState[rn];
+        delete app.locals.chatHistory[rn];
+        io.emit("room-removed", { name: rn });
+      } else {
+        if (app.locals.roomInfos[rn]) {
+          app.locals.roomInfos[rn].users = size;
+          io.emit("room-updated", app.locals.roomInfos[rn]);
+        }
+      }
+
+      // always broadcast updated rooms list
+      broadcastRoomsList();
+
+      if (typeof ack === "function") ack({ ok: true });
+    });
+  });
+
+  // disconnecting
   socket.on("disconnecting", () => {
     const rooms = Array.from(socket.rooms || []).filter(r => r !== socket.id);
     rooms.forEach(r => {
+      try {
+        const username = socket.data.username || `Guest-${socket.id.slice(0,6)}`;
+        const msg = {
+          id: Date.now() + "-" + Math.random().toString(36).slice(2,8),
+          user: sanitizeText(username),
+          text: `${username} desconectou`,
+          ts: Date.now(),
+          system: true,
+          type: 'leave'
+        };
+        app.locals.chatHistory[r] = app.locals.chatHistory[r] || [];
+        app.locals.chatHistory[r].push(msg);
+        if (app.locals.chatHistory[r].length > 300) app.locals.chatHistory[r].shift();
+        socket.to(r).emit("chat-message", msg);
+      } catch (e) {
+        console.warn("disconnecting push chat failed", e);
+      }
+
       setImmediate(() => {
         const size = io.sockets.adapter.rooms.get(r)?.size || 0;
-        // atualiza users
+        io.in(r).emit("room_members", getRoomMembers(r));
+
         if (app.locals.roomInfos[r]) app.locals.roomInfos[r].users = size;
         io.in(r).emit("room-count", size);
 
-        // se zero usuários, remova a sala do registry e notifique o lobby
         if (size === 0 && app.locals.roomInfos[r]) {
-          const removed = app.locals.roomInfos[r];
+          console.log("🗑 sala removida automaticamente:", r);
           delete app.locals.roomInfos[r];
-          // Notifica lobby que a sala foi removida
-          io.emit("room-removed", { name: r, removedAt: Date.now(), preview: removed.preview || null });
+          delete app.locals.rooms[r];
+          delete app.locals.roomsState[r];
+          delete app.locals.chatHistory[r];
+          io.emit("room-removed", { name: r });
         } else {
-          // se ainda existe gente, notifique atualização
           if (app.locals.roomInfos[r]) io.emit("room-updated", app.locals.roomInfos[r]);
         }
+
+        // always broadcast updated rooms list
+        broadcastRoomsList();
       });
     });
   });
@@ -500,7 +698,7 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// ---------- start (bind em 0.0.0.0 e log automático de IPs) ----------
+// ---------- start ----------
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
 
