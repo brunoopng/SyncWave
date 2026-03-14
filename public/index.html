@@ -544,54 +544,6 @@
       box-shadow: 0 12px 40px rgba(0,0,0,0.25);
     }
 
-    /* ----- Volume control styling ----- */
-    .vol-btn {
-      width:40px;height:40px;border-radius:10px;border:0;display:inline-flex;align-items:center;justify-content:center;
-      background: rgba(0,0,0,0.36); color:var(--control-fg); cursor:pointer; box-shadow:0 8px 20px rgba(0,0,0,0.28);
-      backdrop-filter: blur(6px); transition: transform .12s ease, background .12s;
-    }
-    .vol-btn:hover{ transform:translateY(-3px); background: rgba(0,0,0,0.5); }
-
-    /* Improved vol-menu positioning and animation:
-       - default opens below the button (top: calc(100% + 8px))
-       - if there's not enough space it will add .above and open above (bottom: calc(100% + 8px))
-       - menu is positioned by JS and appended to body or to the fullscreen element to ensure visibility in fullscreen
-    */
-    .vol-menu{
-      position: fixed;             /* JS will toggle between fixed (normal) and absolute (fullscreen) */
-      left: 0; top: 0;             /* will be positioned by JS */
-      min-width:170px;
-      max-width: 260px;
-      width:170px;
-      padding:12px;
-      border-radius:12px;
-      background:rgba(20,20,25,0.95);
-      backdrop-filter: blur(8px);
-      border:1px solid rgba(255,255,255,0.06);
-      box-shadow:0 20px 50px rgba(0,0,0,0.5);
-      transform-origin: top center;
-      transform: translateY(-8px) scale(.96);
-      opacity:0;
-      pointer-events:none;
-      transition:opacity .18s ease, transform .18s ease, left .05s ease, top .05s ease;
-      z-index:2147483647; /* muito alto para evitar ser coberto */
-      box-sizing: border-box;
-      overflow: hidden;
-    }
-
-    /* acima do botão (animação inversa) */
-    .vol-menu.above {
-      transform-origin: bottom center;
-      transform: translateY(8px) scale(.96);
-    }
-
-    /* visível */
-    .vol-menu.visible{
-      opacity:1;
-      transform:translateY(0) scale(1);
-      pointer-events:auto;
-    }
-
     
     #openCreateBtn{
       position: relative;
@@ -607,19 +559,281 @@
   left: 394px;
     }
 
-  #themeToggle{
-      background: #ffffff !important;
-  }
+    #themeToggle{
+  background: #ffffff !important;
+}
 
 
-    /* Make the vol-row a full-width container with only the slider inside
-       (we removed the textual label so the slider can stretch edge-to-edge) */
-    .vol-row { display:block; padding:6px 4px; }
-    /* removed label width; if a label exists it will be visually hidden to avoid layout jumps */
-    .vol-row label { position: absolute !important; width:1px !important; height:1px !important; overflow:hidden !important; clip:rect(1px,1px,1px,1px) !important; white-space:nowrap !important; }
-    .vol-slider { display:block; width:100%; -webkit-appearance:none; appearance:none; height:6px; border-radius:999px; background: linear-gradient(90deg,var(--pink),var(--pink-2)); outline:none; }
-    .vol-slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px;height:14px;border-radius:50%; background:#fff; box-shadow:0 6px 12px rgba(0,0,0,0.12); cursor:pointer; }
-    .vol-icon-small { width:18px;height:18px; display:inline-block; }
+
+.controls-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative; /* só para referência de posição dos filhos absolutos */
+}
+
+#forwardBtn {
+  width: 28px;    /* largura */
+  height: 28px;  
+}
+
+#backBtn {
+  width: 28px;    /* largura */
+  height: 28px;  
+}
+
+#playBtn {
+  width: 28px;    /* largura */
+  height: 28px;   
+}
+
+#fsBtn {
+  width: 28px;    /* largura */
+  height: 28px;   
+}
+
+#muteBtn {
+  width: 28px;    /* largura */
+  height: 28px;   
+}
+
+/* container header dentro do painel direito */
+.room-info { padding-right: 48px; /* espaço para o botão, opcional */ }
+
+/* novo header row */
+.room-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* esquerda (título) deve poder encolher sem empurrar */
+.room-header-left {
+  min-width: 0;           /* CRUCIAL: permite que o texto encolha em flex containers */
+  overflow: hidden;
+}
+
+/* título com truncamento se estiver muito longo */
+.room-title {
+  font-size: 18px;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ações (botões) alinhados à direita */
+.room-header-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* btn-ctl já existe no seu CSS — ele combina bem. */
+.room-header-actions .btn-ctl { width:40px; height:40px; }
+
+.participants-btn,
+.btn-ctl {
+  background: #ffffff;
+  color: #000000; /* svg com fill="currentColor" acompanha essa cor */
+  border: 0;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.08);
+  transition: background .18s ease, color .18s ease, transform .12s ease;
+}
+
+/* garantir que o svg herde a cor */
+.participants-btn svg,
+.btn-ctl svg {
+  fill: currentColor;
+}
+
+/* ===== 1) Método recomendado: dentro de um container flex =====
+   - botoes em um container .room-header-actions (ou similar).
+   - o botão “empurra” para a direita usando margin-left:auto. */
+.room-header-actions { display: flex; align-items: center; gap: 8px; }
+.room-header-actions .participants-btn { margin-left: auto; margin-right: 8px; }
+
+/* hover/focus: não vira preto — apenas leve escurecimento no fundo */
+.participants-btn:hover,
+.btn-ctl:hover,
+.participants-btn:focus,
+.btn-ctl:focus {
+  transform: translateY(-2px);
+  outline: none;
+  background: #f2f2f2;  /* leve mudança, NADA de preto */
+  color: #000000;
+}
+
+/* tema escuro: inverter cores e controlar hover também */
+body.dark .participants-btn,
+body.dark .btn-ctl {
+  background: #ffffff;
+  color: #000000;   /* ← SVG fica preto */
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+}
+
+body.dark .participants-btn:hover,
+body.dark .btn-ctl:hover {
+  background: #ffffff;
+  color: #000000;
+}
+
+
+/* ===== 2) Alternativa: se o botão for absolutamente posicionado dentro do painel =====
+   Use se a estrutura HTML não for flex ou você quer posicionamento exato. */
+.room-info { position: relative; } /* container pai */
+.participants-btn.absolute {
+  position: absolute;
+  top: 8px;    /* ajuste fino vertical */
+  right: -62px; /* distância da borda direita */
+  margin-left: 0; /* garantir sem margin auto */
+}
+
+
+/* empurra o botão participantes para a direita usando o id existente */
+.room-header-actions #participantsBtn {
+  margin-left: auto;
+  margin-right: -62px; /* ajuste a distância da borda direita */
+  display: inline-flex; /* garante alinhamento */
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===== PARTICIPANTS OVERLAY (sobrepoe chat) ===== */
+.participants-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 120; /* acima do chat e outros elementos */
+  background: linear-gradient(180deg, rgba(12,16,20,0.96), rgba(16,20,28,0.98));
+  color: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 30px 80px rgba(2,6,12,0.6);
+  transform: translateY(10px) scale(0.995);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .28s cubic-bezier(.2,.9,.25,1), opacity .22s ease;
+  backdrop-filter: blur(8px) saturate(1.08);
+}
+
+/* visible state */
+.participants-overlay.visible {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* header of overlay */
+.participants-overlay .participants-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.participants-overlay .participants-title {
+  font-weight:700;
+  font-size:15px;
+  letter-spacing:-0.2px;
+}
+.participants-overlay .participants-count {
+  font-size:13px;
+  color: rgba(255,255,255,0.7);
+}
+
+/* close button (X) */
+.participants-overlay .participants-close {
+  background: transparent;
+  border: 0;
+  color: rgba(255,255,255,0.85);
+  width:40px;
+  height:40px;
+  border-radius:8px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+.participants-overlay .participants-close:hover {
+  background: rgba(255,255,255,0.04);
+  transform: translateY(-2px);
+}
+
+
+.participants-list {
+  margin-top:8px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding-right:6px;
+  max-height: 300px;       /* altura máxima real */
+  min-height: 0;           /* evita bug do scroll inicial */
+  overflow-y: hidden;      /* por padrão não mostra scrollbar */
+  transition: overflow-y 0.2s ease;
+}
+
+/* quando houver muitos itens, ativar scroll via JS */
+.participants-list.scrollable {
+  overflow-y: auto;
+}
+
+
+/* item */
+.participant-item {
+  display:flex;
+  gap:10px;
+  align-items:center;
+  padding:10px;
+  border-radius:12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25) inset;
+  transform: translateY(8px);
+  opacity: 0;
+  animation: popIn .22s ease forwards;
+}
+.participant-item .avatar {
+  min-width:40px;
+  min-height:40px;
+  width:40px;
+  height:40px;
+  border-radius:10px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  font-size:14px;
+  color:#fff;
+  background: linear-gradient(90deg, rgba(255,77,121,0.95), rgba(255,46,99,0.95));
+  flex-shrink:0;
+}
+.participant-item .p-meta { display:flex;flex-direction:column; }
+.participant-item .p-name { font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.participant-item .p-sub { font-size:12px; color: rgba(255,255,255,0.75); margin-top:2px; }
+
+/* stagger keyframes (items animate in when overlay visible) */
+@keyframes popIn {
+  to { transform: none; opacity:1; }
+}
+
+/* small screens tweak */
+@media (max-width:900px){
+  .participants-overlay { border-radius: 8px; padding:10px; }
+  .participant-item { padding:8px; }
+}
+
+
 
   </style>
 </head>
@@ -646,13 +860,22 @@
 
           <!-- Botão Mudar (solicitado) -->
           <button id="changeVideoBtn" class="btn primary" title="Mudar vídeo" aria-label="Mudar vídeo" style="display:none">
-            Mudar
+            Mudar Video
           </button>
+
+           <button id="leaveRoomBtn" class="btn primary">
+          Sair da sala
+          </button>
+          
 
           <!-- You asked to add a Lobby button and keep it -->
           <button id="openLobbyBtn" class="btn primary" title="Abrir Lobby" aria-label="Abrir Lobby" style="margin-right:8px;">
             Lobby
           </button>
+
+
+          
+
 
           <button id="themeToggle" aria-pressed="false" title="Alternar modo escuro" aria-label="Alternar modo escuro">
             <svg id="themeIcon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6.76 4.84l-1.8-1.79L3.17 4.84l1.79 1.8 1.8-1.8zM1 13h3v-2H1v2zm10 9h2v-3h-2v3zM17.24 4.84l1.79-1.8 1.79 1.8-1.8 1.79-1.78-1.79zM20 11v2h3v-2h-3zM12 5a7 7 0 100 14 7 7 0 000-14z"/></svg>
@@ -673,7 +896,7 @@
                   <label class="file-label">Selecionar vídeo
                     <input id="fileInput" type="file" accept="video/mp4,video/*">
                   </label>
-                  <button id="uploadBtn" class="btn primary" disabled>Enviar</button>
+                  <button id="uploadBtn" class="btn primary" disabled>Enviar Vídeo</button>
                 </div>
 
                 <!-- YouTube agora é um botão idêntico ao 'Selecionar vídeo' e sem modal -->
@@ -690,65 +913,52 @@
             <video id="video" playsinline></video>
             <div id="yt-player" aria-live="polite"></div>
 
-            <div class="controls-overlay" id="controlsOverlay" aria-hidden="true">
-              <div class="controls-left">
-                <button class="btn-ctl" id="backBtn" title="Retroceder 10s" aria-label="Retroceder 10 segundos">
-                  <svg viewBox="0 0 24 24"><path d="M11 18V6l-8 6 8 6zm10 0V6l-8 6 8 6z"/></svg>
-                </button>
+            <!-- CONTROLS OVERLAY (substitua todo o bloco existente desse comentário até o fim do overlay) -->
+<div class="controls-overlay" id="controlsOverlay" aria-hidden="true">
+  <div class="controls-left">
+    <button class="btn-ctl primary" id="backBtn" title="Retroceder 10s" aria-label="Retroceder 10 segundos">
+      <svg viewBox="0 0 24 24"><path d="M11 18V6l-8 6 8 6zm10 0V6l-8 6 8 6z"/></svg>
+    </button>
 
-                <button class="btn-ctl primary" id="playBtn" title="Play/Pause" aria-label="Play/Pausar">
-                  <svg id="ctlPlay" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                  <svg id="ctlPause" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                </button>
+    <button class="btn-ctl primary" id="playBtn" title="Play/Pause" aria-label="Play/Pausar">
+      <svg id="ctlPlay" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      <svg id="ctlPause" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+    </button>
 
-                <button class="btn-ctl" id="forwardBtn" title="Avançar 10s" aria-label="Avançar 10 segundos">
-                  <svg viewBox="0 0 24 24"><path d="M3 6v12l8.5-6L3 6zm10 0v12l8.5-6L13 6z"/></svg>
-                </button>
-              </div>
+    <button class="btn-ctl primary" id="forwardBtn" title="Avançar 10s" aria-label="Avançar 10 segundos">
+      <svg viewBox="0 0 24 24"><path d="M3 6v12l8.5-6L3 6zm10 0v12l8.5-6L13 6z"/></svg>
+    </button>
+  </div>
 
-              <div class="controls-center">
-                <div class="time-small" id="currentTime">0:00</div>
-                <div class="progress" id="progress">
-                  <div class="bar" id="progressBar"></div>
-                  <div class="handle" id="progressHandle"></div>
-                </div>
-                <div class="time-small" id="duration">0:00</div>
-              </div>
+  <div class="controls-center">
+    <div class="time-small" id="currentTime">0:00</div>
+    <div class="progress" id="progress">
+      <div class="bar" id="progressBar"></div>
+      <div class="handle" id="progressHandle"></div>
+    </div>
+    <div class="time-small" id="duration">0:00</div>
+  </div>
 
-              <div class="controls-right">
-                <button class="btn-ctl" id="muteBtn" title="Mudo" aria-label="Mudo">
-                  <svg id="volIcon" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
-                </button>
+  <div class="controls-right">
+    <!-- Mute -->
+    <button class="btn-ctl primary" id="muteBtn" title="Mudo" aria-label="Mudo">
+      <svg id="volIcon" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
+    </button>
 
-                <!-- Volume control (new) -->
-                <div class="quality-control" style="position:relative; pointer-events:auto;">
-                  <button id="volumeBtn" class="vol-btn" title="Volume" aria-haspopup="true" aria-expanded="false">
-                    <!-- distinct small icon (equalizer bars) so it doesn't look like the mute icon -->
-                    <svg class="vol-icon-small" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" focusable="false" role="img">
-                      <rect x="4" y="10" width="3" height="8" rx="1" fill="currentColor"></rect>
-                      <rect x="10.5" y="7" width="3" height="11" rx="1" fill="currentColor"></rect>
-                      <rect x="17" y="4" width="3" height="14" rx="1" fill="currentColor"></rect>
-                    </svg>
-                  </button>
+    <!-- Fullscreen (AGORA dentro do mesmo controls-right) -->
+    <button class="btn-ctl primary id="fsBtn" title="Tela cheia" aria-label="Tela cheia">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path d="M3 9V6a1 1 0 0 1 1-1h3"/>
+        <path d="M21 9V6a1 1 0 0 0-1-1h-3"/>
+        <path d="M3 15v3a1 1 0 0 0 1 1h3"/>
+        <path d="M21 15v3a1 1 0 0 1-1 1h-3"/>
+      </svg>
+    </button>
+  </div>
+</div>
 
-                  <div id="volumeMenu" class="vol-menu" role="menu" aria-hidden="true">
-                    <div class="vol-row">
-                      <input id="volumeSlider" class="vol-slider" type="range" min="0" max="100" step="1" value="100" aria-label="Controle de volume">
-                    </div>
-                    <!-- label removed to avoid layout jumps; slider stretches full width -->
-                  </div>
-                </div>
+<button class="btn-ctl primary id="vol1"></button> 
 
-                <button class="btn-ctl fullscreen" id="fsBtn" title="Tela cheia" aria-label="Tela cheia">
-                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                    <path d="M3 9V6a1 1 0 0 1 1-1h3"/>
-                    <path d="M21 9V6a1 1 0 0 0-1-1h-3"/>
-                    <path d="M3 15v3a1 1 0 0 0 1 1h3"/>
-                    <path d="M21 15v3a1 1 0 0 1-1 1h-3"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
 
             <!-- Quality control (three dots) - appears only when video is loaded -->
             <div class="video-topbar" aria-hidden="true">
@@ -775,9 +985,20 @@
 
     <aside class="right">
       <div class="room-info">
-        <h2 id="roomTitle">Sala</h2>
-        <p id="roomCount">0 pessoas assistindo</p>
-      </div>
+  <div class="room-header" role="presentation">
+    <div class="room-header-left">
+      <h2 id="roomTitle" class="room-title">Sala</h2>
+      <p id="roomCount" class="room-count">0 pessoas assistindo</p>
+    </div>
+
+    <div class="room-header-actions">
+      <button id="participantsBtn" class="btn-ctl" title="Participantes" aria-label="Participantes">
+        <!-- ícone de bonecos -->
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V20h14v-3.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V20h6v-3.5C23 14.17 18.33 13 16 13z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
 
       <div class="chat" id="chatArea" style="position:relative">
         <div class="messages" id="messages">
@@ -893,6 +1114,7 @@
     const videoInner = document.getElementById('videoInner');
     const changeVideoBtn = document.getElementById('changeVideoBtn');
     const appRoot = document.getElementById('appRoot');
+    const leaveRoomBtn = document.getElementById("leaveRoomBtn");
 
     // quality elements
     const qualityControl = document.getElementById('qualityControl');
@@ -914,6 +1136,8 @@
     const progressBar = document.getElementById('progressBar');
     const currentTimeEl = document.getElementById('currentTime');
     const durationEl = document.getElementById('duration');
+
+
 
     // modal nickname elements
     const nickModal = document.getElementById('nickModal');
@@ -942,11 +1166,6 @@
     // NEW fechar button
     const fecharBtn = document.getElementById('fecharBtn');
 
-    // volume elements
-    const volumeBtn = document.getElementById('volumeBtn');
-    const volumeMenu = document.getElementById('volumeMenu');
-    const volumeSlider = document.getElementById('volumeSlider');
-
     // create / join modals (new)
     const createModal = document.getElementById('createModal');
     const createRoomName = document.getElementById('createRoomName');
@@ -961,7 +1180,7 @@
     const joinConfirmBtn = document.getElementById('joinConfirmBtn');
     const joinCancelBtn = document.getElementById('joinCancelBtn');
     const joinModalSubtitle = document.getElementById('joinModalSubtitle');
-
+       
     let nickname = '';
     function askNick() {
       nickModal.classList.add('visible');
@@ -1147,7 +1366,7 @@
 
     function enterConfirmMode() {
       changeMode = true;
-      changeVideoBtn.textContent = 'Enviar (temporário)';
+      changeVideoBtn.textContent = 'Enviar vídeo';
       changeVideoBtn.classList.add('primary');
       showChangeBtn(true); // force visible while confirming
     }
@@ -1155,7 +1374,7 @@
       changeMode = false;
       pendingFile = null;
       pendingYouTube = null;
-      changeVideoBtn.textContent = 'Mudar';
+      changeVideoBtn.textContent = 'Mudar Video';
       changeVideoBtn.classList.remove('primary');
       // show only if video present
       showChangeBtn(true);
@@ -1681,62 +1900,113 @@
     // handle server-provided room list (if server supports it)
     let lobbyRooms = []; // { name, count, hasPassword }
 
-    // Normalize room helper: aceita string/object e retorna objeto consistente
-    function normalizeRoom(r){
-      if (!r) return { name: '', count: 0, hasPassword: false };
-      if (typeof r === 'string') return { name: r, count: 0, hasPassword: false };
-      if (typeof r === 'object') {
-        const name =
-          (typeof r.name === 'string' && r.name.trim()) ? r.name.trim()
-          : (typeof r.room === 'string' && r.room.trim()) ? r.room.trim()
-          : (typeof r.title === 'string' && r.title.trim()) ? r.title.trim()
-          : String(r.name || r.room || r.id || '');
-        return { name: name, count: Number(r.count || 0), hasPassword: !!r.hasPassword };
-      }
-      return { name: String(r), count:0, hasPassword:false };
-    }
+    // antes: function normalizeRoom(r) { ... return { name: name, count: Number(r.count || 0), hasPassword: !!r.hasPassword }; }
+
+function normalizeRoom(r){
+  if (!r) return { name: '', count: 0, hasPassword: false };
+  if (typeof r === 'string') return { name: r, count: 0, hasPassword: false };
+  if (typeof r === 'object') {
+    const name =
+      (typeof r.name === 'string' && r.name.trim()) ? r.name.trim()
+      : (typeof r.room === 'string' && r.room.trim()) ? r.room.trim()
+      : (typeof r.title === 'string' && r.title.trim()) ? r.title.trim()
+      : String(r.name || r.room || r.id || '');
+    // aceita várias formas: r.count, r.users, r.countNumber, r.usersCount
+    const count = Number(
+      (typeof r.count !== 'undefined' ? r.count :
+       (typeof r.users !== 'undefined' ? r.users :
+        (typeof r.usersCount !== 'undefined' ? r.usersCount : 0)))
+    ) || 0;
+    return { name: name, count: count, hasPassword: !!r.hasPassword };
+  }
+  return { name: String(r), count:0, hasPassword:false };
+}
 
     function renderRooms(filter='') {
-      roomsContainer.innerHTML = '';
-      const q = String(filter || '').trim().toLowerCase();
+  roomsContainer.innerHTML = '';
+  const q = String(filter || '').trim().toLowerCase();
 
-      // ensure lobbyRooms entries are normalized objects
-      lobbyRooms = (lobbyRooms || []).map(normalizeRoom);
+  // ensure lobbyRooms entries are normalized objects
+  lobbyRooms = (lobbyRooms || []).map(normalizeRoom);
 
-      const list = lobbyRooms.filter(r => !q || (r.name && r.name.toLowerCase().includes(q)));
-      if (!list.length) {
-        lobbyEmptyNote.style.display = 'block';
-      } else {
-        lobbyEmptyNote.style.display = 'none';
-      }
-      list.forEach(r => {
-        const card = document.createElement('div');
-        card.className = 'room-card';
-        const name = document.createElement('div');
-        name.className = 'room-name';
-        name.textContent = String(r.name || '—');
-        const meta = document.createElement('div');
-        meta.className = 'room-meta';
-        meta.innerHTML = `<span class="lock">${r.hasPassword ? '🔒' : '🔓'}</span><span>${(Number(r.count)||0)} assistindo</span>`;
-        const actions = document.createElement('div');
-        actions.className = 'room-actions';
-        const joinBtnLocal = document.createElement('button');
-        joinBtnLocal.className = 'btn primary';
-        joinBtnLocal.textContent = 'Entrar';
-        joinBtnLocal.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openJoinForRoom(r);
-        });
-        actions.appendChild(joinBtnLocal);
-        card.appendChild(name);
-        card.appendChild(meta);
-        card.appendChild(actions);
-        roomsContainer.appendChild(card);
-      });
+  // helper para detectar "minha sala"
+  function isMyRoom(r) {
+    if (!r) return false;
+    // tenta vários campos possíveis de owner
+    const owner = r.owner || r.host || r.ownerId || (r.raw && r.raw.owner) || '';
+    // checks: socket id, username, or current room name
+    try {
+      if (typeof mySocketId !== 'undefined' && mySocketId && String(owner) === String(mySocketId)) return true;
+      if (typeof myUser !== 'undefined' && myUser && String(owner) === String(myUser)) return true;
+      if (typeof room !== 'undefined' && room && String(r.name) === String(room)) return true;
+    } catch (e) { /* ignore */ }
+    return false;
+  }
 
-      const stats = `Salas: ${lobbyRooms.length} • Filtradas: ${list.length}`;
-      if (lobbyStats) lobbyStats.textContent = stats;
+  // filtra primeiro pelo texto
+  const list = lobbyRooms.filter(r => !q || (r.name && r.name.toLowerCase().includes(q)));
+
+  // ordena: minhas salas primeiro, depois por nome
+  list.sort((a,b) => {
+    const aMine = isMyRoom(a);
+    const bMine = isMyRoom(b);
+    if (aMine && !bMine) return -1;
+    if (!aMine && bMine) return 1;
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+
+  if (!list.length) {
+    lobbyEmptyNote.style.display = 'block';
+  } else {
+    lobbyEmptyNote.style.display = 'none';
+  }
+
+  list.forEach(r => {
+    const mine = isMyRoom(r);
+
+    const card = document.createElement('div');
+    card.className = 'room-card';
+
+    const name = document.createElement('div');
+    name.className = 'room-name';
+    name.textContent = mine ? 'Sua sala' : String(r.name || '—');
+
+    const meta = document.createElement('div');
+    meta.className = 'room-meta';
+    const usersCount = Number(r.count || r.users || 0);
+    if (mine) {
+      meta.innerHTML = `<span class="lock">${r.hasPassword ? '🔒' : '🔓'}</span><span>Você • ${usersCount} ${usersCount === 1 ? 'pessoa' : 'pessoas'}</span>`;
+    } else {
+      meta.innerHTML = `<span class="lock">${r.hasPassword ? '🔒' : '🔓'}</span><span>${usersCount} ${usersCount === 1 ? 'pessoa' : 'pessoas'} assistindo</span>`;
     }
+
+    const actions = document.createElement('div');
+    actions.className = 'room-actions';
+
+    if (mine) {
+      const label = document.createElement('span');
+      label.className = 'room-label-self';
+      actions.appendChild(label);
+    } else {
+      const joinBtnLocal = document.createElement('button');
+      joinBtnLocal.className = 'btn primary';
+      joinBtnLocal.textContent = 'Entrar';
+      joinBtnLocal.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openJoinForRoom(r);
+      });
+      actions.appendChild(joinBtnLocal);
+    }
+
+    card.appendChild(name);
+    card.appendChild(meta);
+    card.appendChild(actions);
+    roomsContainer.appendChild(card);
+  });
+
+  const stats = `Salas: ${lobbyRooms.length} • Filtradas: ${list.length}`;
+  if (lobbyStats) lobbyStats.textContent = stats;
+}
 
     function addOrUpdateRoom(r){
       const roomObj = normalizeRoom(r);
@@ -1761,10 +2031,29 @@
       if (!r) return;
       addOrUpdateRoom(r);
     });
-    socket.on('room-removed', (rname) => {
-      removeRoomByName(rname);
-    });
-    socket.on('room-count', n => { roomCount.textContent = (n || 0) + ' pessoas assistindo'; });
+
+    // atualiza quando servidor emite uma sala atualizada
+socket.on('room-updated', (r) => {
+  if (!r) return;
+  addOrUpdateRoom(r);
+});
+
+socket.on('room-list', (list) => {
+  if (!Array.isArray(list)) return;
+  // atualiza o lobby normalmente
+  lobbyRooms = list.map(it => normalizeRoom(it));
+  renderRooms(lobbySearch.value || '');
+
+  // Se estou numa sala, atualiza o contador da sala com os dados que vieram no list-rooms
+  try {
+    const cur = (list || []).find(i => i && (i.name === room || i.room === room));
+    const users = Number(cur && (cur.users ?? cur.count ?? 0)) || 0;
+    if (roomCount) roomCount.textContent = `${users} ${users === 1 ? 'pessoa' : 'pessoas'} assistindo`;
+    console.log('[debug] room-list recebido — sala atual:', room, 'users:', users, cur);
+  } catch (err) {
+    console.warn('[debug] falha ao atualizar roomCount pelo room-list', err);
+  }
+});
 
     // server video handlers
     socket.on('video-ready', (src) => {
@@ -1929,6 +2218,7 @@
       // Reveal player/chat now that user created/entered a room
       revealAppForRoom();
 
+
       // show the new return button (right of "Criar sala") and also make it fixed for persistent access
       try {
         if (returnToRoomBtn) {
@@ -1993,12 +2283,6 @@
       logStatus('Entrando na sala...');
       uploadAreaShow(false);
 
-      joinModal.classList.remove('visible'); joinModal.style.display='none';
-      lobbyOverlay.style.display = 'none'; lobbyOverlay.setAttribute('aria-hidden','true');
-
-      // Reveal player/chat now that user entered a room
-      revealAppForRoom();
-
       // show the new return button (right of "Criar sala") and make it fixed to persist
       try {
         if (returnToRoomBtn) {
@@ -2013,14 +2297,29 @@
 
       try {
         socket.emit('join-room', { room, password: pw || null, user: nickname }, (ack) => {
-          if (ack && ack.ok) console.log('server ack join-room');
-        });
+
+  if (!ack || !ack.ok) {
+    alert(ack?.error || "❌ Senha incorreta");
+    return;
+  }
+
+  console.log('Entrou na sala');
+
+  joinModal.classList.remove('visible');
+  joinModal.style.display='none';
+
+  lobbyOverlay.style.display = 'none';
+  lobbyOverlay.setAttribute('aria-hidden','true');
+
+  revealAppForRoom();
+
+  socket.emit('room-joined', { name: room, user: nickname });
+  socket.emit('list-rooms');
+
+});
       } catch (err) {
         try { socket.emit('join-room', room); } catch(_){ console.warn('emit join-room fallback failed', _); }
       }
-
-      try { socket.emit('room-joined', { name: room, user: nickname }); } catch(e){}
-      try { socket.emit('list-rooms'); } catch(e){}
     });
 
     try {
@@ -2117,6 +2416,49 @@
         }
       });
     }
+ 
+ 
+    uploadBtn.style.display = 'none'; // 
+
+    function updateUploadBtnVisibility() {
+  // mostra enviar se houver arquivo ou YouTube pendente
+  const hasPending = !!pendingFile || !!pendingYouTube;
+  uploadBtn.style.display = hasPending ? 'inline-flex' : 'none';
+}
+
+fileInput.addEventListener('change', () => {
+  const f = fileInput.files[0];
+  if (!f) {
+    pendingFile = null;
+    updateUploadBtnVisibility();
+    uploadStatus.textContent = '';
+    return;
+  }
+  pendingFile = f;
+  pendingYouTube = null; // garante que só um tipo de upload é ativo
+  uploadStatus.textContent = `Arquivo selecionado: ${f.name} (${fmtSize(f.size)})`;
+  updateUploadBtnVisibility();
+});
+
+youtubeBtn.addEventListener('click', () => {
+  const raw = prompt('Cole a URL ou ID do YouTube:');
+  if (!raw) {
+    pendingYouTube = null;
+    updateUploadBtnVisibility();
+    return;
+  }
+  const id = extractYouTubeID(raw); // função que você já usa para extrair ID
+  if (!id) {
+    pendingYouTube = null;
+    updateUploadBtnVisibility();
+    return;
+  }
+  pendingYouTube = { id, raw };
+  pendingFile = null; 
+  uploadStatus.textContent = `Pronto para enviar: ${raw}`;
+  updateUploadBtnVisibility();
+});
+
 
     // -------------------------
     // YouTube simple flow (PROMPT, sem modal)
@@ -2135,7 +2477,6 @@
       return null;
     }
 
-    const YT_API_KEY = 'AIzaSyDSWsuBjVjknRxnz6GHPMWlnTwFSAsTUf4'; // SUA API KEY (atenção: exposta no cliente)
 
     function isoDurationToSeconds(iso) {
       if (!iso) return 0;
@@ -2413,6 +2754,9 @@
         try {
           appRoot.classList.remove('initial-hidden');
           appRoot.classList.add('revealed');
+
+          updateCreateBtnVisibility();
+
           // show return button beside create room in header (do not fix by default)
           if (returnToRoomBtn) {
             returnToRoomBtn.style.display = 'inline-flex';
@@ -2460,239 +2804,13 @@
         });
       }
 
-      // VOLUME control wiring
-      function setVolumeUIIcon(v) {
-        try {
-          const volIconMain = document.getElementById('volIcon');
-          if (volIconMain) {
-            if (v === 0) {
-              // novo SVG de mutado: alto-falante com X (mais claro)
-              volIconMain.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M17 9l4 4M21 9l-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
-            } else if (v <= 40) {
-              volIconMain.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/>';
-            } else {
-              volIconMain.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M16.5 7.5c.9 1 1.5 2.4 1.5 4.5s-.6 3.5-1.5 4.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/>';
-            }
-          }
-          const small = volumeBtn && volumeBtn.querySelector('svg');
-          if (small) {
-            if (v === 0) {
-              // small equalizer + clear X overlay
-              small.innerHTML = '<rect x="4" y="10" width="3" height="8" rx="1" fill="currentColor"></rect><rect x="10.5" y="7" width="3" height="11" rx="1" fill="currentColor"></rect><rect x="17" y="4" width="3" height="14" rx="1" fill="currentColor"></rect><path d="M6 8 L18 20 M18 8 L6 20" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>';
-            } else {
-              // normal equalizer bars
-              small.innerHTML = '<rect x="4" y="10" width="3" height="8" rx="1" fill="currentColor"></rect><rect x="10.5" y="7" width="3" height="11" rx="1" fill="currentColor"></rect><rect x="17" y="4" width="3" height="14" rx="1" fill="currentColor"></rect>';
-            }
-          }
-        } catch(e){}
-      }
-
-      async function applyVolumeToPlayer(val /*0-100*/) {
-        try {
-          if (isYouTube && typeof ytPlayer !== 'undefined' && ytPlayer && typeof ytPlayer.setVolume === 'function') {
-            try { ytPlayer.setVolume(Number(val)); } catch(e){}
-            if (Number(val) > 0 && ytPlayer.isMuted && typeof ytPlayer.isMuted === 'function' && ytPlayer.isMuted()) {
-              try { ytPlayer.unMute(); } catch(e){}
-            }
-          } else if (typeof video !== 'undefined' && video) {
-            video.volume = Math.max(0, Math.min(1, Number(val) / 100));
-            if (video.muted && video.volume > 0) video.muted = false;
-          }
-          setVolumeUIIcon(Number(val));
-        } catch(e){}
-      }
-
-      // ---- Volume menu portal + posicionamento robusto ----
-(function volumeMenuPortal(){
-  let repositionHandler = null;
-
-  function calcAndPlaceMenu() {
-    if (!volumeBtn || !volumeMenu) return;
-    const btnRect = volumeBtn.getBoundingClientRect();
-    // When hidden, offsetHeight may be 0 — use a sensible default
-    const menuHeight = Math.max(volumeMenu.offsetHeight, 120);
-    const menuWidth = Math.max(volumeMenu.offsetWidth, 170);
-    const margin = 8;
-
-    // If inside fullscreen, position relative to fullscreen element and append there (absolute)
-    const fsEl = document.fullscreenElement || document.webkitFullscreenElement || null;
-    if (fsEl) {
-      const fsRect = fsEl.getBoundingClientRect();
-      const spaceBelow = fsRect.bottom - btnRect.bottom;
-      const spaceAbove = btnRect.top - fsRect.top;
-
-      let top;
-      // PREFER above; fallback to below when not enough space above
-      if (spaceAbove >= menuHeight + margin || spaceAbove >= spaceBelow) {
-        // open above (relative to fullscreen)
-        top = Math.max(margin, btnRect.top - fsRect.top - menuHeight - margin);
-        volumeMenu.classList.add('above');
-      } else {
-        // open below
-        top = Math.min(fsRect.height - menuHeight - margin, btnRect.bottom - fsRect.top + margin);
-        volumeMenu.classList.remove('above');
-      }
-
-      // center horizontally over the button but clamp to fullscreen bounds
-      let left = btnRect.left - fsRect.left + (btnRect.width / 2) - (menuWidth / 2);
-      left = Math.min(Math.max(margin, left), fsRect.width - menuWidth - margin);
-
-      // convert to absolute coords relative to fsEl
-      volumeMenu.style.position = 'absolute';
-      volumeMenu.style.left = Math.round(left) + 'px';
-      volumeMenu.style.top = Math.round(top) + 'px';
-
-      // ensure appended to fullscreen element
-      try {
-        if (volumeMenu.parentElement !== fsEl) {
-          fsEl.appendChild(volumeMenu);
-        }
-      } catch (e) {
-        // fallback: append to body and use fixed positioning as backup
-        if (volumeMenu.parentElement !== document.body) document.body.appendChild(volumeMenu);
-        volumeMenu.style.position = 'fixed';
-      }
-
-      return;
-    }
-
-    // Normal (not fullscreen): append to body and position fixed relative to viewport
-    const spaceBelow = window.innerHeight - btnRect.bottom;
-    const spaceAbove = btnRect.top;
-
-    let top;
-    // PREFER above; fallback to below when not enough space above
-    if (spaceAbove >= menuHeight + margin || spaceAbove >= spaceBelow) {
-      // abrir acima
-      top = Math.max(margin, btnRect.top - menuHeight - margin);
-      volumeMenu.classList.add('above');
-    } else {
-      // abrir abaixo
-      top = Math.min(window.innerHeight - menuHeight - margin, btnRect.bottom + margin);
-      volumeMenu.classList.remove('above');
-    }
-
-    // center horizontally over the button and clamp to viewport
-    const left = Math.min(Math.max(margin, btnRect.left + (btnRect.width / 2) - (menuWidth / 2)), window.innerWidth - menuWidth - margin);
-
-    // ensure appended to body for fixed positioning
-    if (volumeMenu.parentElement !== document.body) {
-      try { document.body.appendChild(volumeMenu); } catch(e){}
-    }
-    volumeMenu.style.position = 'fixed';
-    volumeMenu.style.left = Math.round(left) + 'px';
-    volumeMenu.style.top = Math.round(top) + 'px';
+      function updateCreateBtnVisibility() {
+  if (window.__sync_in_room) {   // se estiver em uma sala
+    openCreateBtn.style.display = 'none';
+  } else {                       // se estiver no lobby
+    openCreateBtn.style.display = 'inline-flex';
   }
-
-  // export calcAndPlaceMenu for external callers (resize fallback)
-  window.calcAndPlaceMenu = calcAndPlaceMenu;
-
-  function openVolumeMenu() {
-    try {
-      if (!volumeMenu || !volumeBtn) return;
-
-      // ensure slider reflects current volume
-      try {
-        let currentVol = 100;
-        if (isYouTube && ytPlayer && typeof ytPlayer.getVolume === 'function') {
-          currentVol = Number(ytPlayer.getVolume && ytPlayer.getVolume()) || currentVol;
-        } else if (video) {
-          currentVol = Math.round((video.volume || 1) * 100);
-        }
-        if (volumeSlider) volumeSlider.value = Math.max(0, Math.min(100, currentVol));
-        setVolumeUIIcon(Number(volumeSlider ? volumeSlider.value : currentVol));
-      } catch(e){}
-
-      // calcular e posicionar
-      calcAndPlaceMenu();
-
-      // mostrar
-      volumeMenu.classList.add('visible');
-      volumeMenu.setAttribute('aria-hidden', 'false');
-      volumeBtn.setAttribute('aria-expanded', 'true');
-
-      // handlers para fechar fora e tecla esc
-      document.addEventListener('click', onDocClickCloseVolume);
-      document.addEventListener('keydown', onDocKeyCloseVolume);
-
-      // reposicionar ao redimensionar / scroll (mantém o menu alinhado ao botão)
-      repositionHandler = () => { calcAndPlaceMenu(); };
-      window.addEventListener('resize', repositionHandler);
-      window.addEventListener('scroll', repositionHandler, true); // true para capturar scrolls em ancestors
-
-    } catch (e) { console.warn('openVolumeMenu error', e); }
-  }
-
-  function closeVolumeMenu() {
-    try {
-      if (!volumeMenu) return;
-      volumeMenu.classList.remove('visible');
-      volumeMenu.classList.remove('above');
-      volumeMenu.setAttribute('aria-hidden', 'true');
-      volumeBtn.setAttribute('aria-expanded', 'false');
-
-      document.removeEventListener('click', onDocClickCloseVolume);
-      document.removeEventListener('keydown', onDocKeyCloseVolume);
-
-      if (repositionHandler) {
-        window.removeEventListener('resize', repositionHandler);
-        window.removeEventListener('scroll', repositionHandler, true);
-        repositionHandler = null;
-      }
-    } catch (e) { console.warn('closeVolumeMenu error', e); }
-  }
-
-  function toggleVolumeMenu(e) {
-    try {
-      e.stopPropagation();
-      if (!volumeMenu) return;
-      if (volumeMenu.classList.contains('visible')) closeVolumeMenu();
-      else openVolumeMenu();
-    } catch (e) { console.warn('toggleVolumeMenu', e); }
-  }
-
-  function onDocClickCloseVolume(ev) {
-    try {
-      // se o clique NÃO for nem no botão nem no menu, fechar
-      // note: if menu is appended to fullscreen element, volumeMenu.contains still works
-      if (!volumeBtn.contains(ev.target) && !volumeMenu.contains(ev.target)) {
-        closeVolumeMenu();
-      }
-    } catch (e) { }
-  }
-  function onDocKeyCloseVolume(ev) {
-    try { if (ev.key === 'Escape') closeVolumeMenu(); } catch (e) { }
-  }
-
-  // export to outer scope (replaces previous function names)
-  window.openVolumeMenu = openVolumeMenu;
-  window.closeVolumeMenu = closeVolumeMenu;
-  window.toggleVolumeMenu = toggleVolumeMenu;
-  window.onDocClickCloseVolume = onDocClickCloseVolume;
-  window.onDocKeyCloseVolume = onDocKeyCloseVolume;
-})();
-
-      // Keep vol icon synced when mute toggled (existing muteBtn handler exists)
-      if (muteBtn) {
-        // single unified handler (was previously duplicated). This toggles mute for both YT and <video>,
-        // updates the UI icons and keeps the slider in sync.
-        muteBtn.addEventListener('click', (ev) => {
-          try {
-            if (isYouTube && ytPlayer && typeof ytPlayer.isMuted === 'function') {
-              if (ytPlayer.isMuted()) { ytPlayer.unMute(); }
-              else { ytPlayer.mute(); }
-              const vol = (ytPlayer.getVolume && ytPlayer.getVolume()) || (volumeSlider ? Number(volumeSlider.value) : 100);
-              setVolumeUIIcon(Number(vol));
-              if (volumeSlider) volumeSlider.value = Math.max(0, Math.min(100, Number(vol)));
-            } else if (video) {
-              video.muted = !video.muted;
-              const vol = video.muted ? 0 : Math.round((video.volume||1)*100);
-              setVolumeUIIcon(vol);
-              if (volumeSlider) { volumeSlider.value = vol; }
-            }
-          } catch(e){}
-        });
-      }
+}
 
       // expose reveal for external usage
       window.__syncwave_revealApp = revealAppForRoom;
@@ -2700,35 +2818,154 @@
 
     console.log('Frontend pronto — Lobby FULLSCREEN implementado e evento de criação reforçado.');
 
-    // ---- Additional event bindings for volume control and quality button ----
-    // bind the volume button to the toggle function (ensures menu opens correctly)
-    try {
-      if (volumeBtn) volumeBtn.addEventListener('click', (e)=> window.toggleVolumeMenu(e));
-    } catch(e){}
-
-    // volume slider update handler (applies immediately)
-    try {
-      if (volumeSlider) {
-        volumeSlider.addEventListener('input', (ev) => {
-          try { applyVolumeToPlayer(Number(ev.target.value)); } catch(e){}
-        });
-      }
-    } catch(e){}
-
     // quality menu toggle binding (if exists)
     try {
       if (qualityBtn) qualityBtn.addEventListener('click', toggleQualityMenu);
     } catch(e){}
 
-    // Ensure window resize updates position if menu open
-    window.addEventListener('resize', () => {
-      try {
-        if (volumeMenu && volumeMenu.classList.contains('visible')) {
-          // recalc position using exported function
-          if (window.calcAndPlaceMenu) window.calcAndPlaceMenu();
-        }
-      } catch(e){}
+   leaveRoomBtn.addEventListener("click", () => {
+
+  if (room) {
+    socket.emit("leave-room", room);
+  }
+
+  // reinicia o site completamente
+  window.location.reload();
+
+});
+
+// ===== Participants overlay: cria comportamento (click no botão abre; X fecha) =====
+(function(){
+  const participantsBtn = document.getElementById('participantsBtn');
+  const chatArea = document.getElementById('chatArea'); // .chat (tem position:relative)
+  if (!participantsBtn || !chatArea) return;
+
+  // cria overlay (se não existir)
+  let overlay = document.querySelector('.participants-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'participants-overlay';
+    overlay.setAttribute('role','dialog');
+    overlay.setAttribute('aria-hidden','true');
+    overlay.innerHTML = `
+      <div class="participants-header">
+        <div style="display:flex;flex-direction:column;">
+          <div class="participants-title">Participantes</div>
+          <div class="participants-count">0 membros</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+        </div>
+      </div>
+      <div class="participants-list" aria-live="polite"></div>
+    `;
+    chatArea.appendChild(overlay);
+  }
+
+
+  const listEl = overlay.querySelector('.participants-list');
+  const countEl = overlay.querySelector('.participants-count');
+
+  // local cache (será atualizado pelo servidor)
+  let currentMembers = [];
+
+  // abre overlay — solicita a lista ao servidor (se existir) e popula com cache
+  function openOverlay(){
+    overlay.classList.add('visible');
+    overlay.setAttribute('aria-hidden','false');
+    // popula com o cache (ou vazio) imediatamente para feedback
+    populateParticipants(currentMembers);
+    // solicita atualização ao servidor (usa safeEmit se disponível)
+    try {
+      if (typeof safeEmit === 'function') safeEmit('request_room_members', { room });
+      else if (socket && typeof socket.emit === 'function') socket.emit('request_room_members', { room });
+    } catch(e){}
+    
+  }
+
+  function closeOverlay(){
+    overlay.classList.remove('visible');
+    overlay.setAttribute('aria-hidden','true');
+  }
+
+  // evita fechar ao clicar dentro da lista
+  overlay.addEventListener('click', (ev) => {
+    // só fecha se clicar exatamente no fundo do overlay (se quiser). 
+    // Mas o requisito era fechar só com o X — então não fechamos ao clicar fora.
+    // if (ev.target === overlay) closeOverlay();
+  });
+
+  // atalho Esc fecha também (agradável ao usuário)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay.classList.contains('visible')) closeOverlay();
+  });
+
+  // popula lista e anima com stagger
+  function populateParticipants(members){
+    currentMembers = Array.isArray(members) ? members : [];
+    listEl.innerHTML = '';
+    countEl.textContent = `${currentMembers.length} ${currentMembers.length === 1 ? 'membro' : 'membros'}`;
+
+    currentMembers.forEach((m, i) => {
+      const name = (m && (m.name || m.nick)) ? (m.name || m.nick) : 'Convidado';
+      const sub = (m && m.status) ? m.status : (m && m.meta) ? m.meta : 'online';
+      const initials = String(name).split(' ').map(s=> s[0]).slice(0,2).join('').toUpperCase();
+
+      const it = document.createElement('div');
+      it.className = 'participant-item';
+      it.style.animationDelay = (i * 45) + 'ms';
+      it.innerHTML = `
+        <div class="avatar" aria-hidden="true">${escapeHtml(initials)}</div>
+        <div class="p-meta">
+          <div class="p-name">${escapeHtml(name)}</div>
+          <div class="p-sub">${escapeHtml(sub)}</div>
+        </div>
+      `;
+      listEl.appendChild(it);
     });
+
+    // se não tiver ninguém, mostra nota
+    if (currentMembers.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'participant-item';
+      empty.style.justifyContent = 'center';
+      empty.style.opacity = '1';
+      empty.style.transform = 'none';
+      empty.innerHTML = `<div style="color:rgba(255,255,255,0.7);font-size:13px">Nenhum participante conectado</div>`;
+      listEl.appendChild(empty);
+    }
+  }
+
+  // small helpers to avoid XSS
+  function escapeHtml(s){
+    if (s === undefined || s === null) return '';
+    return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]); });
+  }
+
+  // click no botão abre (toggle)
+  participantsBtn.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    if (overlay.classList.contains('visible')) closeOverlay();
+    else openOverlay();
+  });
+
+  // -------------- integração socket (se houver)
+  // servidor pode enviar 'room_members' com array de { name, nick, status }
+  try {
+    if (typeof socket !== 'undefined' && socket && typeof socket.on === 'function') {
+      socket.on('room_members', (members) => {
+        if (!Array.isArray(members)) return;
+        currentMembers = members;
+        // atualiza se overlay estiver aberto, ou apenas atualiza cache
+        if (overlay.classList.contains('visible')) populateParticipants(members);
+      });
+    }
+  } catch(e){}
+
+  // expose function globalmente para permitir atualizar manualmente
+  window.populateParticipantsOverlay = populateParticipants;
+
+})();
+
 
   </script>
 </body>
