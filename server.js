@@ -249,15 +249,19 @@ io.on("connection", (socket) => {
   if (!set) return [];
 
   const members = [];
+  const roomInfo = app.locals.roomInfos[room];
 
   for (const id of set) {
     const s = io.sockets.sockets.get(id);
     if (!s) continue;
 
+    const isHost = roomInfo && roomInfo.owner === id;
+
     members.push({
       id,
       name: s.data?.username || `Guest-${id.slice(0,6)}`,
-      status: "online"
+      status: "online",
+      host: isHost
     });
   }
 
@@ -696,6 +700,21 @@ app.use((err, req, res, next) => {
     return res.status(500).json({ error: "Erro no servidor durante upload" });
   }
   next(err);
+});
+
+// rota HTTP simples para buscar meta do YouTube via servidor (usa YT_API_KEY do servidor)
+app.get('/api/youtube', async (req, res) => {
+  try {
+    const id = (req.query.id || '').toString().trim();
+    if (!id) return res.status(400).json({ ok: false, error: 'Parâmetro "id" ausente' });
+
+    const meta = await fetchYouTubeMetaServer(id);
+    // sanitize / return only needed fields
+    return res.json({ ok: true, meta });
+  } catch (err) {
+    console.error('api/youtube error:', err && err.message ? err.message : err);
+    return res.status(500).json({ ok: false, error: (err && err.message) ? err.message : 'Erro servidor' });
+  }
 });
 
 // ---------- start ----------
