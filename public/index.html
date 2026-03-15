@@ -833,6 +833,117 @@ body.dark .btn-ctl:hover {
   .participant-item { padding:8px; }
 }
 
+/* =========================
+   BANNER SYNCWAVE (corrigido)
+   Não sobrepõe controles do lobby; empurra o conteúdo para baixo.
+   Troque as cores alterando --site-primary / --site-secondary abaixo.
+   ========================= */
+
+:root{
+  --syncwave-banner-height: 64px;       /* altura do banner - ajuste se quiser */
+  --site-primary:  #FF4D79;             /* cor primária (troque aqui) */
+  --site-secondary:#FF2E63;             /* cor secundária (troque aqui) */
+  --syncwave-text: #ffffff;
+  --syncwave-padding-x: 18px;
+  --syncwave-font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+/* GARANTE QUE O .lobby TEM CONTEXTO RELATIVO (necessário para posicionamento absoluto do banner) */
+.lobby {
+  position: relative;     /* importante */
+  padding-top: var(--syncwave-banner-height); /* empurra TODO o conteúdo para baixo do banner */
+}
+
+/* Banner: posicionado no topo do .lobby, visual por cima, mas conteúdo não é sobreposto graças ao padding-top acima */
+.lobby .syncwave-banner {
+  position: absolute;    /* visual fica "fixo" no topo do diálogo do lobby */
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--syncwave-banner-height);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--syncwave-padding-x);
+  gap: 12px;
+  background: linear-gradient(90deg, var(--site-primary), var(--site-secondary));
+  color: var(--syncwave-text);
+  font-family: var(--syncwave-font);
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  z-index: 999; /* fica acima do conteúdo visualmente, mas não o sobrepõe por causa do padding */
+  box-shadow: 0 6px 18px rgba(2,6,23,0.08);
+  border-radius: 8px 8px 0 0; /* opcional: canto arredondado superior */
+}
+
+/* Texto "SyncWave" no canto esquerdo */
+.lobby .syncwave-banner .brand {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+/* Responsivo: banner menor em telas pequenas */
+@media (max-width: 480px){
+  :root { --syncwave-banner-height: 56px; --syncwave-padding-x: 12px; }
+  .lobby .syncwave-banner { font-size: 0.95rem; }
+}
+
+/* --- Caso existam elementos posicionados 'absolute' ou 'fixed' específicos que ainda estejam sobrepondo,
+   forçamos eles a respeitarem o espaço do banner adicionando um deslocamento mínimo.
+   Use com parcimônia; se você souber os seletores exatos dos botões podemos ajustar só aqueles. */
+.lobby .lobby-header,
+.lobby .lobby-actions,
+.lobby .lobby-left,
+.lobby .lobby-right,
+.lobby .controls {
+  /* este margin-top só age se esses elementos estiverem no fluxo (não tem efeito sobre items fixed),
+     mas resolve a maioria dos casos onde os botões estavam visualmente no topo */
+  margin-top: 8px;
+}
+
+/* Caso algum botão dentro do lobby tenha position: absolute/fixed e esteja cobrindo o banner,
+   podemos empurrá-lo com um override específico (apenas se necessário):
+   .lobby .btn.sua-classe { transform: translateY(var(--syncwave-banner-height)); }
+*/
+
+.btn.primary {
+  background-color: #FF2E63 !important;
+  border-color: #FF2E63 !important;
+  color: #fff; /* texto branco para contraste */
+}
+
+.btn.primary:hover {
+  background-color: #e02456 !important; /* ligeiro hover */
+}
+
+label.file-label {
+  background-color: #FF2E63;
+  color: #fff;
+}
+
+.messages .msg {
+  background-color: #FF2E63; /* mesma cor do btn primary */
+  color: #fff;               /* texto branco */
+}
+
+#lobbyEmptyNote {
+  display: flex;               /* centraliza facilmente */
+  justify-content: center;     /* centraliza horizontalmente */
+  align-items: center;         /* centraliza verticalmente */
+  height: 100%;                /* ocupa todo o container pai */
+  text-align: center;          /* centraliza o texto */
+  font-size: 16px;
+  color: var(--muted);         /* mantém a cor do texto */
+  background: transparent !important;  /* remove qualquer fundo existente */
+  box-shadow: none !important;         /* remove sombra, se houver */
+  border: none !important;             /* remove borda, se houver */
+}
+
+#controlsOverlay .btn.primary:active,
+#controlsOverlay .btn.primary:focus {
+    transform: none !important;      /* remove qualquer deslocamento */
+    box-shadow: none !important;     /* remove sombra de clique */
+    outline: none !important;        /* remove contorno de foco */
+}
 
 
   </style>
@@ -847,7 +958,7 @@ body.dark .btn-ctl:hover {
       <header>
         <div class="brand">
           <div class="logo">SyncWave.</div>
-          <div class="tag">beta dedicada ao melhores calls.</div>
+          <div class="tag"></div>
         </div>
 
         <div class="top-actions">
@@ -1019,11 +1130,21 @@ body.dark .btn-ctl:hover {
   <!-- ---------- Lobby Overlay (FULLSCREEN) ---------- -->
   <div class="lobby-overlay" id="lobbyOverlay" aria-hidden="true">
     <div class="lobby" role="dialog" aria-modal="true" aria-label="Salas">
+      <header class="syncwave-banner" role="banner" aria-label="Banner SyncWave">
+  <div class="brand" aria-hidden="false">
+    <span>SyncWave.</span>
+  </div>
+  <!-- Se quiser um botão pequeno à direita (opcional), descomente:
+  <div style="margin-left:auto">
+    <button aria-label="Ajuda" class="banner-cta">?</button>
+  </div>
+  -->
+</header>
       <div class="lobby-left">
         <div class="lobby-header">
           <div>
-            <div style="font-weight:700;font-size:18px">Salas Criadas</div>
-            <div style="font-size:13px;color:var(--muted)">Dedicado ao Melhores Calls.💖</div>
+            <div style="font-weight:700;font-size:18px">Salas Disponíveis</div>
+            <div style="font-size:13px;color:var(--muted)"></div>
           </div>
           <div class="lobby-actions" style="display:flex;align-items:center;gap:8px">
             <div class="search-bar">
