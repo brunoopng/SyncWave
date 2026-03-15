@@ -241,7 +241,7 @@
     .progress{
       height:6px;border-radius:999px;background:rgba(255,255,255,0.08);position:relative;cursor:pointer;flex:1;overflow:hidden;
     }
-    .progress .bar{position:absolute;left:0;top:0;height:100%;width:0%;background:linear-gradient(90deg,var(--pink),var(--pink-2));border-radius:999px;transition:width .08s linear}
+    .progress .bar{position:absolute;left:0;top:0;height:100%;width:0%;background:linear-gradient(90deg,var(--pink),var(--pink-2));border-radius:0px;transition:width .08s linear}
     .progress .handle{position:absolute;right:0;top:50%;transform:translate(50%,-50%);width:10px;height:10px;border-radius:50%;background:var(--handle-bg);box-shadow:0 6px 12px rgba(0,0,0,0.2);opacity:0;transition:opacity .12s}
     .progress:hover .handle{opacity:1}
 
@@ -512,6 +512,30 @@
     .lobby-empty { color:var(--muted);font-size:13px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.01) }
 
     .modal-compact { max-width:420px; width:100%; }
+     
+
+    /* ROOM THUMBNAIL (lobby) */
+.room-thumb {
+  width: 100%;
+  height: 120px;                /* ajuste se preferir outro tamanho */
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(0,0,0,0.04), rgba(0,0,0,0.02));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.room-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 0; /* mantendo o container com radius */
+}
+@media (min-width:1100px){
+  .room-thumb { height: 140px; }
+}
+
 
     #fecharBtn {
     display: none;
@@ -596,6 +620,19 @@
   width: 28px;    /* largura */
   height: 28px;   
 }
+
+#VolBtn{
+width:28px;
+height:28px;
+
+padding:0;
+
+display:flex;
+align-items:center;
+justify-content:center;
+}
+
+
 
 /* container header dentro do painel direito */
 .room-info { padding-right: 48px; /* espaço para o botão, opcional */ }
@@ -712,19 +749,17 @@ body.dark .btn-ctl:hover {
   position: absolute;
   inset: 0;
   z-index: 120; /* acima do chat e outros elementos */
-  background: linear-gradient(180deg, rgba(12,16,20,0.96), rgba(16,20,28,0.98));
-  color: #fff;
+  background: #ffffff;
+  color: #000000;
   border-radius: 12px;
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  box-shadow: 0 30px 80px rgba(2,6,12,0.6);
   transform: translateY(10px) scale(0.995);
   opacity: 0;
   pointer-events: none;
   transition: transform .28s cubic-bezier(.2,.9,.25,1), opacity .22s ease;
-  backdrop-filter: blur(8px) saturate(1.08);
 }
 
 /* visible state */
@@ -750,14 +785,14 @@ body.dark .btn-ctl:hover {
 }
 .participants-overlay .participants-count {
   font-size:13px;
-  color: rgba(255,255,255,0.7);
+  color: rgba(0, 0, 0, 0.7);
 }
 
 /* close button (X) */
 .participants-overlay .participants-close {
   background: transparent;
   border: 0;
-  color: rgba(255,255,255,0.85);
+  color: rgba(0, 0, 0, 0.85);
   width:40px;
   height:40px;
   border-radius:8px;
@@ -820,7 +855,7 @@ body.dark .btn-ctl:hover {
 }
 .participant-item .p-meta { display:flex;flex-direction:column; }
 .participant-item .p-name { font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.participant-item .p-sub { font-size:12px; color: rgba(255,255,255,0.75); margin-top:2px; }
+.participant-item .p-sub { font-size:12px; color: rgba(0, 0, 0, 0.75); margin-top:2px; }
 
 /* stagger keyframes (items animate in when overlay visible) */
 @keyframes popIn {
@@ -915,6 +950,29 @@ body.dark .btn-ctl:hover {
   background-color: #e02456 !important; /* ligeiro hover */
 }
 
+#changeVideoBtn {
+  background-color: #FF2E63 !important;
+  border-color: #FF2E63 !important;
+  color: #fff; /* texto branco para contraste */
+}
+
+#changeVideoBtn:hover {
+  background-color:  #e02456 !important;
+}
+
+
+#uploadBtn {
+  background-color: #FF2E63 !important;
+  border-color: #FF2E63 !important;
+  color: #fff; /* texto branco para contraste */
+}
+#uploadBtn:hover {
+  background-color:  #e02456 !important;
+}
+
+
+
+
 label.file-label {
   background-color: #FF2E63;
   color: #fff;
@@ -943,6 +1001,152 @@ label.file-label {
     transform: none !important;      /* remove qualquer deslocamento */
     box-shadow: none !important;     /* remove sombra de clique */
     outline: none !important;        /* remove contorno de foco */
+}
+
+.room-card-thumb{
+width:100%;
+height:90px;
+overflow:hidden;
+border-radius:8px;
+margin-bottom:6px;
+background:#111;
+}
+
+.room-card-thumb img{
+width:100%;
+height:100%;
+object-fit:cover;
+display:block;
+}
+
+.host-badge{
+  color:#ffd166;
+  font-size:12px;
+  margin-left:6px;
+  font-weight:600;
+}
+
+.player-btn{
+width:40px;
+height:40px;
+
+border-radius:50%;
+border:none;
+
+background:#FF2E63;
+
+display:flex;
+align-items:center;
+justify-content:center;
+
+cursor:pointer;
+
+transition:transform .15s;
+}
+
+/* clique */
+.player-btn:active{
+transform:scale(0.9);
+}
+
+/* SVG dentro do botão */
+.player-btn svg{
+width:18px;
+height:18px;
+
+fill:white;      /* deixa o ícone branco */
+stroke:white;    /* caso seja ícone com stroke */
+}
+
+.progress{
+height:6px;
+border-radius:999px;
+background:rgba(241, 236, 236, 0.874);
+position:relative;
+cursor:pointer;
+flex:1;
+overflow:hidden;
+}
+
+.progress .bar{
+position:absolute;
+left:0;
+top:0;
+height:100%;
+width:0%;
+background:linear-gradient(90deg,var(--pink),var(--pink-2));
+border-radius:0;
+transition:width .08s linear;
+}
+
+.progress .handle{
+position:absolute;
+left:0; /* mudar de right para left */
+top:50%;
+transform:translate(-50%,-50%);
+
+width:10px;
+height:10px;
+
+border-radius:50%;
+background:var(--handle-bg);.volume-box{
+display:flex;
+align-items:center;
+gap:8px;
+}
+
+.volume-slider{
+width:0;
+opacity:0;
+transition:width .25s ease, opacity .2s;
+
+accent-color:#FF2E63;
+cursor:pointer;
+}
+
+/* quando abrir */
+.volume-box.active .volume-slider{
+width:110px;
+opacity:1;
+}
+
+box-shadow:0 6px 12px rgba(0,0,0,0.2);
+opacity:0;
+
+transition:opacity .12s;
+}
+
+.progress:hover .handle{
+opacity:1;
+}
+
+.volume-box{
+position:relative;
+display:flex;
+align-items:center;
+}
+
+.volume-slider{
+position:absolute;
+
+bottom:30px; /* abre acima do botão */
+left:50%;
+transform:translateX(-50%);
+
+width:110px;
+
+opacity:0;
+pointer-events:none;
+
+transition:opacity .2s ease;
+
+accent-color:#FF2E63;
+}
+
+/* slider ativo */
+.volume-box.active .volume-slider{
+opacity:1;
+pointer-events:auto;
 }
 
 
@@ -1027,16 +1231,16 @@ label.file-label {
             <!-- CONTROLS OVERLAY (substitua todo o bloco existente desse comentário até o fim do overlay) -->
 <div class="controls-overlay" id="controlsOverlay" aria-hidden="true">
   <div class="controls-left">
-    <button class="btn-ctl primary" id="backBtn" title="Retroceder 10s" aria-label="Retroceder 10 segundos">
+    <button class="player-btn" id="backBtn" title="Retroceder 10s" aria-label="Retroceder 10 segundos">
       <svg viewBox="0 0 24 24"><path d="M11 18V6l-8 6 8 6zm10 0V6l-8 6 8 6z"/></svg>
     </button>
 
-    <button class="btn-ctl primary" id="playBtn" title="Play/Pause" aria-label="Play/Pausar">
+    <button class="player-btn" id="playBtn" title="Play/Pause" aria-label="Play/Pausar">
       <svg id="ctlPlay" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
       <svg id="ctlPause" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
     </button>
 
-    <button class="btn-ctl primary" id="forwardBtn" title="Avançar 10s" aria-label="Avançar 10 segundos">
+    <button class="player-btn" id="forwardBtn" title="Avançar 10s" aria-label="Avançar 10 segundos">
       <svg viewBox="0 0 24 24"><path d="M3 6v12l8.5-6L3 6zm10 0v12l8.5-6L13 6z"/></svg>
     </button>
   </div>
@@ -1045,19 +1249,31 @@ label.file-label {
     <div class="time-small" id="currentTime">0:00</div>
     <div class="progress" id="progress">
       <div class="bar" id="progressBar"></div>
-      <div class="handle" id="progressHandle"></div>
     </div>
     <div class="time-small" id="duration">0:00</div>
   </div>
 
   <div class="controls-right">
     <!-- Mute -->
-    <button class="btn-ctl primary" id="muteBtn" title="Mudo" aria-label="Mudo">
-      <svg id="volIcon" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
-    </button>
+    <div class="volume-box">
+
+<button class="player-btn" id="VolBtn" title="Volume" aria-label="Volume">
+  <svg id="volIcon" viewBox="0 0 24 24">
+    <path d="M3 9v6h4l5 5V4L7 9H3z"/>
+    <path d="M16 8c1.5 1.5 1.5 6.5 0 8" fill="none" stroke="white" stroke-width="2"/>
+    <path d="M19 5c3 3 3 11 0 14" fill="none" stroke="white" stroke-width="2"/>
+  </svg>
+</button>
+
+<input type="range" id="volumeSlider" class="volume-slider"
+min="0" max="1" step="0.01" value="1">
+
+</div>
+
+
 
     <!-- Fullscreen (AGORA dentro do mesmo controls-right) -->
-    <button class="btn-ctl primary" id="fsBtn" title="Tela cheia" aria-label="Tela cheia">
+    <button class="player-btn" id="fsBtn" title="Tela cheia" aria-label="Tela cheia">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <path d="M3 9V6a1 1 0 0 1 1-1h3"/>
         <path d="M21 9V6a1 1 0 0 0-1-1h-3"/>
@@ -1249,7 +1465,7 @@ label.file-label {
     const ctlPause = document.getElementById('ctlPause');
     const backBtn = document.getElementById('backBtn');
     const forwardBtn = document.getElementById('forwardBtn');
-    const muteBtn = document.getElementById('muteBtn');
+
     const volIcon = document.getElementById('volIcon');
     const fsBtn = document.getElementById('fsBtn');
     const progress = document.getElementById('progress');
@@ -2025,20 +2241,36 @@ label.file-label {
 function normalizeRoom(r){
   if (!r) return { name: '', count: 0, hasPassword: false };
   if (typeof r === 'string') return { name: r, count: 0, hasPassword: false };
+
   if (typeof r === 'object') {
     const name =
       (typeof r.name === 'string' && r.name.trim()) ? r.name.trim()
       : (typeof r.room === 'string' && r.room.trim()) ? r.room.trim()
       : (typeof r.title === 'string' && r.title.trim()) ? r.title.trim()
       : String(r.name || r.room || r.id || '');
-    // aceita várias formas: r.count, r.users, r.countNumber, r.usersCount
+
     const count = Number(
       (typeof r.count !== 'undefined' ? r.count :
        (typeof r.users !== 'undefined' ? r.users :
         (typeof r.usersCount !== 'undefined' ? r.usersCount : 0)))
     ) || 0;
-    return { name: name, count: count, hasPassword: !!r.hasPassword };
+
+    // preserve original object for later inspection
+    const raw = r;
+
+    // attempt to detect youtube id in several possible shapes
+    let youtube = null;
+    if (typeof r.youtube === 'string' && /^[A-Za-z0-9_-]{11}$/.test(r.youtube)) youtube = r.youtube;
+    else if (r.video && typeof r.video === 'object' && typeof r.video.youtube === 'string' && /^[A-Za-z0-9_-]{11}$/.test(r.video.youtube)) youtube = r.video.youtube;
+    else if (typeof r.video === 'string' && /^[A-Za-z0-9_-]{11}$/.test(r.video)) youtube = r.video;
+    else if (r.raw && r.raw.youtube && typeof r.raw.youtube === 'string' && /^[A-Za-z0-9_-]{11}$/.test(r.raw.youtube)) youtube = r.raw.youtube;
+
+    // keep possible video metadata (could be string url, object with thumb, etc.)
+    const video = r.video || r.media || r.videoInfo || null;
+
+    return { name: name, count: count, hasPassword: !!r.hasPassword, raw: raw, video: video, youtube: youtube };
   }
+
   return { name: String(r), count:0, hasPassword:false };
 }
 
@@ -2082,42 +2314,100 @@ function normalizeRoom(r){
   }
 
   list.forEach(r => {
-    const mine = isMyRoom(r);
 
     const card = document.createElement('div');
-    card.className = 'room-card';
+  card.className = 'room-card';
 
-    const name = document.createElement('div');
-    name.className = 'room-name';
-    name.textContent = mine ? 'Sua sala' : String(r.name || '—');
+  // --- THUMBNAIL ---
+  const thumbWrap = document.createElement('div');
+  thumbWrap.className = 'room-thumb';
 
-    const meta = document.createElement('div');
-    meta.className = 'room-meta';
-    const usersCount = Number(r.count || r.users || 0);
-    if (mine) {
-      meta.innerHTML = `<span class="lock">${r.hasPassword ? '🔒' : '🔓'}</span><span>Você • ${usersCount} ${usersCount === 1 ? 'pessoa' : 'pessoas'}</span>`;
-    } else {
-      meta.innerHTML = `<span class="lock">${r.hasPassword ? '🔒' : '🔓'}</span><span>${usersCount} ${usersCount === 1 ? 'pessoa' : 'pessoas'} assistindo</span>`;
-    }
+  const thumbImg = document.createElement('img');
+  thumbImg.alt = `Thumbnail da sala ${String(r.name || '')}`;
 
-    const actions = document.createElement('div');
-    actions.className = 'room-actions';
+  // inline fallback SVG (data URL) — simples e leve
+  const defaultThumb = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+       <rect width="100%" height="100%" fill="#F3F4F6"/>
+       <g transform="translate(320 180)" fill="#D1D5DB" font-family="sans-serif" text-anchor="middle">
+         <circle r="46" fill="#E5E7EB"/>
+         <path d="M-12 -18 L18 0 L-12 18 z" fill="#9CA3AF"/>
+       </g>
+     </svg>`
+  );
 
-    if (mine) {
-      const label = document.createElement('span');
-      label.className = 'room-label-self';
-      actions.appendChild(label);
-    } else {
-      const joinBtnLocal = document.createElement('button');
-      joinBtnLocal.className = 'btn primary';
-      joinBtnLocal.textContent = 'Entrar';
-      joinBtnLocal.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openJoinForRoom(r);
-      });
-      actions.appendChild(joinBtnLocal);
-    }
+  // helper to set fallback in a chain
+  function setDefaultThumb(imgEl){ imgEl.onerror = null; imgEl.src = defaultThumb; }
 
+  if (r && r.youtube) {
+    // try high-res first, fallback to hqdefault, then default SVG
+    thumbImg.src = `https://i.ytimg.com/vi/${r.youtube}/maxresdefault.jpg`;
+    thumbImg.onerror = function(){
+      this.onerror = null;
+      this.src = `https://i.ytimg.com/vi/${r.youtube}/hqdefault.jpg`;
+      // second fallback to defaultThumb if hqdefault fail
+      this.onerror = function(){ setDefaultThumb(this); };
+    };
+  } else if (r && r.video && typeof r.video === 'object' && (r.video.thumbnail || r.video.thumb)) {
+    thumbImg.src = r.video.thumbnail || r.video.thumb;
+    thumbImg.onerror = function(){ setDefaultThumb(this); };
+  } else if (r && typeof r.video === 'string' && r.video.indexOf('http') === 0) {
+    // if server sent a video string that is actually a URL to a hosted thumb, try it
+    thumbImg.src = r.video;
+    thumbImg.onerror = function(){ setDefaultThumb(this); };
+  } else {
+    // no video info -> default
+    thumbImg.src = defaultThumb;
+  }
+
+  thumbWrap.appendChild(thumbImg);
+  card.appendChild(thumbWrap);
+
+  
+
+// --- NAME / META / ACTIONS ---
+const mine = isHost && r.name === room;
+const inRoom = r.name === room;
+
+const name = document.createElement('div');
+name.className = 'room-name';
+name.textContent = mine ? 'Sua sala' : String(r.name || '—');
+
+const meta = document.createElement('div');
+meta.className = 'room-meta';
+
+const usersCount = Number(r.count || r.users || 0);
+
+if (mine) {
+  meta.innerHTML = `<span class="lock">${r.hasPassword ? '🔒' : '🔓'}</span><span>Você • ${usersCount} ${usersCount === 1 ? 'pessoa' : 'pessoas'}</span>`;
+} else {
+  meta.innerHTML = `<span class="lock">${r.hasPassword ? '🔒' : '🔓'}</span><span>${usersCount} ${usersCount === 1 ? 'pessoa' : 'pessoas'} assistindo</span>`;
+}
+
+const actions = document.createElement('div');
+actions.className = 'room-actions';
+
+if (mine) {
+
+  const label = document.createElement('span');
+  label.className = 'room-label-self';
+ 
+  actions.appendChild(label);
+
+} else if (!inRoom) {
+
+  const joinBtnLocal = document.createElement('button');
+  joinBtnLocal.className = 'btn primary';
+  joinBtnLocal.textContent = 'Entrar';
+
+  joinBtnLocal.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openJoinForRoom(r);
+  });
+
+  actions.appendChild(joinBtnLocal);
+
+}
     card.appendChild(name);
     card.appendChild(meta);
     card.appendChild(actions);
@@ -2482,68 +2772,131 @@ socket.on('room-list', (list) => {
       }
     });
 
-    if (uploadBtn) {
-      uploadBtn.addEventListener('click', async () => {
-        const f = fileInput.files[0];
-        if (!f) return alert('Escolha um arquivo antes de enviar');
-        if (!room) return alert('Crie a sala primeiro');
+   // ==== Upload button (agora trata arquivos E YouTube pendentes) ====
+if (uploadBtn) {
+  uploadBtn.addEventListener('click', async () => {
+    // primeiro: se estivermos em modo "confirm" (changeMode) delegamos ao fluxo de mudança
+    try {
+      // ===== versão rápida: aplica o YouTube otimistically e emite para servidor =====
+      if (pendingYouTube && pendingYouTube.id) {
+        if (!room) { uploadStatus.textContent = 'Crie a sala primeiro.'; return; }
+
+        uploadStatus.textContent = 'Aplicando vídeo do YouTube localmente e notificando servidor...';
         uploadBtn.disabled = true;
-        uploadStatus.textContent = 'Enviando...';
-        const fd = new FormData(); fd.append('video', f); fd.append('room', room);
+
+        // aplica imediatamente no player local (experiência imediata)
         try {
-          let res = await fetch(`/upload/${encodeURIComponent(room)}`, { method:'POST', body: fd });
-          if (!res.ok) {
-            console.warn('/upload/:room falhou', res.status);
-            res = await fetch('/upload', { method:'POST', body: fd });
-          }
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          const json = await res.json();
-
-          let payload;
-          if (typeof json === 'string') {
-            payload = { video: json };
-          } else if (json && json.video) {
-            payload = json;
-          } else if (json && typeof json === 'object') {
-            payload = json;
-          } else {
-            throw new Error('Resposta inválida do servidor');
-          }
-
-          try {
-            if (payload.video) setVideo(payload);
-            else setVideo(payload);
-          } catch (e){ console.warn('setVideo fallback', e); }
-
-          uploadStatus.textContent = 'Upload concluído';
-          logStatus('Upload OK — vídeo disponível');
-          fileInput.value = '';
-          uploadBtn.disabled = true;
-
-          try {
-            socket.emit('video-ready', { room, video: payload }, (ack) => {
-              if (ack && ack.ok) console.log('server ack video-ready');
-            });
-          } catch (err) {
-            try { socket.emit('video-ready', payload); } catch(_) { console.warn('emit video-ready falhou', _); }
-          }
-
-        } catch (err) {
-          console.error('Erro upload', err);
-          uploadStatus.textContent = 'Erro no upload';
-          alert('Erro no upload: ' + (err.message || err));
-          uploadBtn.disabled = false;
+          setVideo({ youtube: pendingYouTube.id });
+          logStatus('Aplicado localmente (optimistic).');
+        } catch(e) {
+          console.warn('setVideo optimistic failed', e);
         }
-      });
-    }
- 
- 
-    uploadBtn.style.display = 'none'; // 
 
-    function updateUploadBtnVisibility() {
-  // mostra enviar se houver arquivo ou YouTube pendente
+        // tenta notificar o servidor — não bloqueamos o usuário esperando callback
+        try {
+          // emite sem depender exclusivamente do callback; o servidor pode confirmar depois
+          socket.emit('youtube', { room, url: pendingYouTube.raw, id: pendingYouTube.id }, (resp) => {
+            if (resp && resp.ok) {
+              logStatus('Servidor confirmou mudança de vídeo.');
+              uploadStatus.textContent = 'Vídeo aplicado à sala (confirmado pelo servidor).';
+            } else if (resp && resp.error) {
+              console.warn('Servidor respondeu com erro ao adicionar YouTube:', resp.error);
+              uploadStatus.textContent = 'Aplicado localmente; servidor: ' + resp.error;
+            } else {
+              // sem resp ou sem confirmação — já aplicamos localmente
+              uploadStatus.textContent = 'Vídeo aplicado localmente (sem confirmação do servidor).';
+            }
+          });
+        } catch (emitErr) {
+          console.warn('emit youtube falhou', emitErr);
+          uploadStatus.textContent = 'Aplicado localmente (erro ao notificar servidor).';
+        }
+
+        // limpa estado de pending e atualiza UI
+        pendingYouTube = null;
+        pendingFile = null;
+        updateUploadBtnVisibility();
+        return;
+      }
+
+      // Caso 2: envio de arquivo local (fallback para comportamento anterior)
+      // tenta pegar primeiro pendingFile (se estiver usando changeMode) senão pega fileInput
+      const f = pendingFile || fileInput.files[0];
+      if (!f) {
+        alert('Nenhum vídeo selecionado. Escolha um arquivo (clicando no seletor) ou informe um YouTube antes de enviar.');
+        return;
+      }
+      if (!room) { alert('Crie a sala primeiro'); return; }
+
+      // prepara upload de arquivo
+      uploadBtn.disabled = true;
+      uploadStatus.textContent = 'Enviando...';
+      const fd = new FormData();
+      fd.append('video', f);
+      fd.append('room', room);
+
+      try {
+        // tenta rota específica da sala primeiro
+        let res = await fetch(`/upload/${encodeURIComponent(room)}`, { method:'POST', body: fd });
+        if (!res.ok) {
+          // fallback para rota /upload
+          console.warn('/upload/:room falhou', res.status);
+          res = await fetch('/upload', { method:'POST', body: fd });
+        }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const json = await res.json();
+
+        let payload;
+        if (typeof json === 'string') payload = { video: json };
+        else if (json && json.video) payload = json;
+        else if (json && typeof json === 'object') payload = json;
+        else throw new Error('Resposta inválida do servidor');
+
+        try {
+          if (payload.video) setVideo(payload);
+          else setVideo(payload);
+        } catch (e){ console.warn('setVideo fallback', e); }
+
+        uploadStatus.textContent = 'Upload concluído';
+        logStatus('Upload OK — vídeo disponível');
+
+        // limpa input / estado
+        fileInput.value = '';
+        pendingFile = null;
+        uploadBtn.disabled = true;
+
+        // notifica servidor (legacy)
+        try {
+          socket.emit('video-ready', { room, video: payload }, (ack) => {
+            if (ack && ack.ok) console.log('server ack video-ready');
+          });
+        } catch (err) {
+          try { socket.emit('video-ready', payload); } catch(_) { console.warn('emit video-ready falhou', _); }
+        }
+
+      } catch (err) {
+        console.error('Erro upload', err);
+        uploadStatus.textContent = 'Erro no upload';
+        alert('Erro no upload: ' + (err.message || err));
+        uploadBtn.disabled = false;
+      }
+    } catch (outerErr) {
+      console.error('uploadBtn handler error', outerErr);
+      uploadStatus.textContent = 'Erro interno';
+      uploadBtn.disabled = false;
+    }
+  });
+}
+
+uploadBtn.style.display = 'none'; //
+
+function updateUploadBtnVisibility() {
+  // mostra/enabled o botão se houver arquivo ou YouTube pendente
   const hasPending = !!pendingFile || !!pendingYouTube;
+  if (!uploadBtn) return;
   uploadBtn.style.display = hasPending ? 'inline-flex' : 'none';
+  // habilita o botão quando houver algo a enviar (arquivo OU youtube)
+  uploadBtn.disabled = !hasPending;
 }
 
 fileInput.addEventListener('change', () => {
@@ -2560,115 +2913,110 @@ fileInput.addEventListener('change', () => {
   updateUploadBtnVisibility();
 });
 
-youtubeBtn.addEventListener('click', () => {
-  const raw = prompt('Cole a URL ou ID do YouTube:');
-  if (!raw) {
-    pendingYouTube = null;
-    updateUploadBtnVisibility();
-    return;
+// === Consolida handler do YouTube e remove listeners duplicados ===
+(function setupYoutubeButton() {
+  const ybtn = document.getElementById('youtubeBtn');
+  if (!ybtn) return;
+
+  // Remove listeners anteriores com clonagem (garante limpeza)
+  const clone = ybtn.cloneNode(true);
+  ybtn.parentNode.replaceChild(clone, ybtn);
+
+  // Use a referência ao clone daqui pra frente
+  const btn = clone;
+})();
+
+// -------------------------
+// YouTube simple flow (PROMPT, sem duplicatas)
+// -------------------------
+function extractYouTubeID(input){
+  if (!input) return null;
+  input = String(input).trim().replace(/[<>]/g,'');
+  const regex = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
+  const m = input.match(regex);
+  if (m && m[1]) return m[1];
+  if (/^[A-Za-z0-9_-]{11}$/.test(input)) return input;
+  try {
+    const q = (new URLSearchParams((input.split('?')[1]||''))).get('v');
+    if (q && /^[A-Za-z0-9_-]{11}$/.test(q)) return q;
+  } catch(e){}
+  return null;
+}
+
+// chamada cliente agora vai pro servidor em vez de usar YT_API_KEY no browser
+async function fetchYouTubeMeta(id) {
+  if (!id) throw new Error('id ausente');
+  const url = `/api/youtube?id=${encodeURIComponent(id)}`;
+  const res = await fetch(url, { method: 'GET' });
+  if (!res.ok) {
+    const txt = await res.text().catch(()=>String(res.status));
+    throw new Error('Erro no servidor ao buscar meta do YouTube: ' + txt);
   }
-  const id = extractYouTubeID(raw); // função que você já usa para extrair ID
-  if (!id) {
-    pendingYouTube = null;
-    updateUploadBtnVisibility();
-    return;
+  const json = await res.json();
+  if (!json.ok || !json.meta) {
+    throw new Error('Meta inválida: ' + (json.error || 'sem dados'));
   }
-  pendingYouTube = { id, raw };
-  pendingFile = null; 
-  uploadStatus.textContent = `Pronto para enviar: ${raw}`;
-  updateUploadBtnVisibility();
-});
 
+  // json.meta já vem no formato retornado pelo servidor (fetchYouTubeMetaServer)
+  return json.meta;
+}
 
-    // -------------------------
-    // YouTube simple flow (PROMPT, sem modal)
-    // -------------------------
-    function extractYouTubeID(input){
-      if (!input) return null;
-      input = String(input).trim().replace(/[<>]/g,'');
-      const regex = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
-      const m = input.match(regex);
-      if (m && m[1]) return m[1];
-      if (/^[A-Za-z0-9_-]{11}$/.test(input)) return input;
-      try {
-        const q = (new URLSearchParams((input.split('?')[1]||''))).get('v');
-        if (q && /^[A-Za-z0-9_-]{11}$/.test(q)) return q;
-      } catch(e){}
-      return null;
+   // === Consolida handler do YouTube e remove listeners duplicados ===
+(function setupYoutubeButton() {
+  const ybtn = document.getElementById('youtubeBtn');
+  if (!ybtn) return;
+
+  // Remove listeners anteriores com clonagem (garante limpeza)
+  const clone = ybtn.cloneNode(true);
+  ybtn.parentNode.replaceChild(clone, ybtn);
+
+  // Use a referência ao clone daqui pra frente
+  const btn = clone;
+
+  btn.addEventListener('click', async () => {
+    if (!room) return alert('Crie a sala primeiro');
+
+    // PROMPT: mesma mensagem do changeVideoBtn (inclui 11 caracteres)
+    const raw = prompt('Cole a URL do YouTube ou o ID (11 caracteres):');
+    if (!raw) {
+      pendingYouTube = null;
+      updateUploadBtnVisibility();
+      return;
     }
 
-
-    function isoDurationToSeconds(iso) {
-      if (!iso) return 0;
-      const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-      if (!m) return 0;
-      const h = parseInt(m[1] || 0, 10);
-      const min = parseInt(m[2] || 0, 10);
-      const s = parseInt(m[3] || 0, 10);
-      return h * 3600 + min * 60 + s;
-    }
-    function fmtTimeFromSeconds(sec) {
-      sec = Math.max(0, Math.floor(sec || 0));
-      const m = Math.floor(sec / 60);
-      const s = sec % 60;
-      return m + ':' + (s < 10 ? '0' + s : s);
+    const id = extractYouTubeID(raw);
+    if (!id) {
+      pendingYouTube = null;
+      updateUploadBtnVisibility();
+      if (uploadStatus) uploadStatus.textContent = 'ID inválido.';
+      return;
     }
 
-    async function fetchYouTubeMeta(id) {
-      const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,status&id=${encodeURIComponent(id)}&key=${YT_API_KEY}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('YouTube API error: ' + res.status);
-      const json = await res.json();
-      if (!json.items || !json.items.length) throw new Error('Vídeo não encontrado');
-      const it = json.items[0];
-      return {
-        id,
-        title: it.snippet.title,
-        channelTitle: it.snippet.channelTitle,
-        thumbnails: it.snippet.thumbnails,
-        durationISO: it.contentDetails ? it.contentDetails.duration : null,
-        durationSec: it.contentDetails ? isoDurationToSeconds(it.contentDetails.duration) : 0,
-        embeddable: it.status ? !!it.status.embeddable : true
-      };
-    }
+    // indica validação
+    if (uploadStatus) uploadStatus.textContent = 'Validando vídeo...';
 
-    // youtubeBtn (legacy) still opens prompt and sets immediately
-    youtubeBtn.addEventListener('click', async () => {
-      if (!room) return alert('Crie a sala primeiro');
-      const raw = prompt('Cole a URL do YouTube ou o ID (11 caracteres):');
-      if (!raw) return;
-      const id = extractYouTubeID(raw);
-      if (!id) {
-        uploadStatus.textContent = 'ID inválido.';
-        return;
-      }
-      uploadStatus.textContent = 'Carregando informações...';
-      try {
-        const meta = await fetchYouTubeMeta(id);
-        if (!meta.embeddable) {
-          uploadStatus.textContent = 'Este vídeo não permite incorporação.';
-          showUnembeddableUI(id, 150);
-          return;
-        }
-        try {
-          socket.emit('youtube', { room, url: raw, id, meta }, (resp) => {
-            if (!resp || !resp.ok) {
-              uploadStatus.textContent = 'Erro ao adicionar vídeo: ' + (resp && resp.error ? resp.error : 'sem resposta do servidor');
-              return;
-            }
-            setVideo({ youtube: id });
-            logStatus('Vídeo do YouTube carregado (servidor confirmou)');
-          });
-        } catch (e) {
-          console.warn('socket emit youtube failed', e);
-          setVideo({ youtube: id });
-          logStatus('Vídeo do YouTube carregado (aplicado localmente)');
-        }
-      } catch (err) {
-        console.warn('fetchYouTubeMeta failed', err);
-        uploadStatus.textContent = 'Não foi possível obter informações do vídeo. Verifique a URL/ID ou a quota da API.';
-      }
-    });
+    try {
+      // valida com seu endpoint servidor (/api/youtube) para não expor chave
+      const resp = await fetch(`/api/youtube?id=${encodeURIComponent(id)}`, { method: 'GET' });
+      if (!resp.ok) throw new Error('Erro na validação: ' + resp.status);
+      const json = await resp.json();
+      if (!json || !json.ok || !json.meta) throw new Error(json && json.error ? json.error : 'Resposta inválida');
+
+      // sucesso: armazena pendingYouTube (mantém até o upload)
+      pendingYouTube = { id, raw, meta: json.meta };
+      pendingFile = null;
+      if (uploadStatus) uploadStatus.textContent = `Pronto para enviar: ${raw}`;
+      updateUploadBtnVisibility();
+
+    } catch (err) {
+      console.error('youtube validate error', err);
+      pendingYouTube = null;
+      updateUploadBtnVisibility();
+      if (uploadStatus) uploadStatus.textContent = 'Falha ao validar vídeo: ' + (err.message || err);
+      alert('Falha ao validar vídeo: ' + (err.message || err));
+    }
+  });
+})();
 
     // CHANGE VIDEO FLOW (new)
     if (changeVideoBtn) {
@@ -2711,42 +3059,38 @@ youtubeBtn.addEventListener('click', () => {
             return;
           }
         }
+        // --- substituir o bloco que tenta fetchYouTubeMeta(pendingYouTube.id) ---
+if (changeMode) {
+  if (pendingYouTube) {
+    uploadStatus.textContent = 'Enviando vídeo do YouTube...';
+    try {
+      // Em vez de buscar meta aqui no client, enviamos direto ao servidor
+      socket.emit('youtube', { room, url: pendingYouTube.raw, id: pendingYouTube.id }, (resp) => {
+        if (resp && resp.ok) {
+          // servidor validou e gravou meta — atualiza UI com confirmação do servidor
+          setVideo({ youtube: pendingYouTube.id });
+          logStatus('Vídeo do YouTube carregado (servidor confirmou)');
+        } else {
+          // servidor pode recusar (ex: id inválido, não embeddable, erro na API)
+          // ainda aplicamos localmente como fallback, mas mostra mensagem ao usuário
+          setVideo({ youtube: pendingYouTube.id });
+          logStatus('Vídeo do YouTube aplicado localmente; servidor não confirmou: ' + (resp && resp.error ? resp.error : 'sem resposta'));
+          if (resp && resp.error) uploadStatus.textContent = 'Servidor: ' + resp.error;
+        }
+        pendingYouTube = null;
+        exitConfirmMode();
+      });
+    } catch (err) {
+      console.warn('emit youtube falhou', err);
+      setVideo({ youtube: pendingYouTube.id });
+      logStatus('Vídeo do YouTube carregado (aplicado localmente)');
+      pendingYouTube = null;
+      exitConfirmMode();
+    }
+    return;
+  }
+  // ... restante do changeMode (upload de arquivo) ...
 
-        if (changeMode) {
-          if (pendingYouTube) {
-            uploadStatus.textContent = 'Enviando vídeo do YouTube...';
-            try {
-              const meta = await fetchYouTubeMeta(pendingYouTube.id).catch(()=>null);
-              if (meta && !meta.embeddable) {
-                uploadStatus.textContent = 'Este vídeo não permite incorporação.';
-                showUnembeddableUI(pendingYouTube.id, 150);
-                return;
-              }
-              try {
-                socket.emit('youtube', { room, url: pendingYouTube.raw, id: pendingYouTube.id, meta }, (resp) => {
-                  if (resp && resp.ok) {
-                    setVideo({ youtube: pendingYouTube.id });
-                    logStatus('Vídeo do YouTube carregado (servidor confirmou)');
-                  } else {
-                    setVideo({ youtube: pendingYouTube.id });
-                    logStatus('Vídeo do YouTube carregado (aplicado localmente)');
-                  }
-                  pendingYouTube = null;
-                  exitConfirmMode();
-                });
-              } catch (err) {
-                console.warn('emit youtube falhou', err);
-                setVideo({ youtube: pendingYouTube.id });
-                logStatus('Vídeo do YouTube carregado (aplicado localmente)');
-                pendingYouTube = null;
-                exitConfirmMode();
-              }
-            } catch (err) {
-              console.warn('Erro ao enviar YouTube', err);
-              uploadStatus.textContent = 'Falha ao enviar vídeo do YouTube.';
-            }
-            return;
-          }
 
           if (pendingFile) {
             if (!room) { uploadStatus.textContent = 'Crie a sala primeiro.'; return; }
@@ -3026,9 +3370,12 @@ youtubeBtn.addEventListener('click', () => {
     countEl.textContent = `${currentMembers.length} ${currentMembers.length === 1 ? 'membro' : 'membros'}`;
 
     currentMembers.forEach((m, i) => {
-      const name = (m && (m.name || m.nick)) ? (m.name || m.nick) : 'Convidado';
-      const sub = (m && m.status) ? m.status : (m && m.meta) ? m.meta : 'online';
-      const initials = String(name).split(' ').map(s=> s[0]).slice(0,2).join('').toUpperCase();
+      const baseName = (m && (m.name || m.nick)) ? (m.name || m.nick) : 'Convidado';
+const isHost = m && !!m.host; // qualquer valor truthy será considerado host
+const name = baseName + (isHost ? " (HOST)" : "");
+
+const sub = (m && m.status) ? m.status : (m && m.meta) ? m.meta : 'online';
+const initials = String(baseName).split(' ').map(s=> s[0]).slice(0,2).join('').toUpperCase();
 
       const it = document.createElement('div');
       it.className = 'participant-item';
@@ -3036,7 +3383,9 @@ youtubeBtn.addEventListener('click', () => {
       it.innerHTML = `
         <div class="avatar" aria-hidden="true">${escapeHtml(initials)}</div>
         <div class="p-meta">
-          <div class="p-name">${escapeHtml(name)}</div>
+          <div class="p-name">
+  ${escapeHtml(name)}
+</div>
           <div class="p-sub">${escapeHtml(sub)}</div>
         </div>
       `;
@@ -3085,6 +3434,56 @@ youtubeBtn.addEventListener('click', () => {
   window.populateParticipantsOverlay = populateParticipants;
 
 })();
+
+document.getElementById("themeToggle").style.display = "none";
+
+
+const volBtn = document.getElementById("VolBtn");
+const slider = document.getElementById("volumeSlider");
+const box = document.querySelector(".volume-box");
+const icon = document.getElementById("volIcon");
+
+let volumeTimer;
+
+function hideVolume(){
+  box.classList.remove("active");
+}
+
+volBtn.addEventListener("click", () => {
+
+  box.classList.toggle("active");
+
+  clearTimeout(volumeTimer);
+  volumeTimer = setTimeout(hideVolume, 2500);
+
+});
+
+slider.addEventListener("input", () => {
+
+  video.volume = slider.value;
+
+  clearTimeout(volumeTimer);
+  volumeTimer = setTimeout(hideVolume, 2500);
+
+  if(slider.value == 0){
+
+    icon.innerHTML = `
+    <path d="M3 9v6h4l5 5V4L7 9H3z"/>
+    <line x1="18" y1="8" x2="22" y2="16" stroke="white" stroke-width="2"/>
+    <line x1="22" y1="8" x2="18" y2="16" stroke="white" stroke-width="2"/>
+    `;
+
+  }else{
+
+    icon.innerHTML = `
+    <path d="M3 9v6h4l5 5V4L7 9H3z"/>
+    <path d="M16 8c1.5 1.5 1.5 6.5 0 8" fill="none" stroke="white" stroke-width="2"/>
+    <path d="M19 5c3 3 3 11 0 14" fill="none" stroke="white" stroke-width="2"/>
+    `;
+
+  }
+
+});
 
 
   </script>
