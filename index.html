@@ -1,0 +1,3491 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SyncWave — Watch Party</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      /* core palette (light) */
+      --bg1:#FAEDF0;--bg2:#FFF5F7;
+      --fg:#111; --muted:#8D99AE;
+      --pink:#FF4D79;--pink-2:#FF2E63;
+      --card: rgba(255,255,255,0.95);
+      --glass-border: rgba(0,0,0,0.06);
+      --chat-bg: #fff; --msg-bg: #F8F9FA; --handle-bg: #fff;
+      --video-bg: #000;
+      --lobby-bg-panel: rgba(255,255,255,0.98);
+      --max-width:1200px;--radius:24px;
+      --control-size:42px;
+      --control-bg: rgba(0,0,0,0.35);
+      --control-fg: #fff;
+
+      /* theme transition timing */
+      --theme-transition: 380ms;
+    }
+
+    /* dark theme overrides */
+    body.dark {
+      --bg1: #0f1720; --bg2: #071016;
+      --fg: #E6EEF3; --muted:#A6B3BD;
+      --card: rgba(8,12,16,0.64); --glass-border: rgba(255,255,255,0.04);
+      --chat-bg: rgba(10,14,18,0.6); --msg-bg: rgba(255,255,255,0.03);
+      --handle-bg: #111;
+      --video-bg: #000;
+      --control-bg: rgba(255,255,255,0.06);
+      --control-fg: #fff;
+      --pink: #FF6F99; --pink-2: #FF4D7A;
+      --lobby-bg-panel: rgba(6,10,14,0.6);
+    }
+
+    /* Avoid flash: start hidden, reveal only after entering a room */
+    .app.initial-hidden { visibility: hidden; opacity: 0; pointer-events: none; transition: visibility 0s linear 0s, opacity 180ms ease; }
+    .app.revealed { visibility: visible; opacity: 1; pointer-events: auto; transition: opacity 180ms ease; }
+
+    /* global smooth transitions for themeable properties */
+    * { box-sizing:border-box; margin:0; padding:0; font-family:'Plus Jakarta Sans',system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial }
+    body{
+      min-height:100vh;display:flex;align-items:center;justify-content:center;
+      background: linear-gradient(135deg, var(--bg1) 0%, var(--bg2) 100%);
+      color:var(--fg); padding:28px;
+      transition: background var(--theme-transition) ease, color var(--theme-transition) ease;
+    }
+
+    /* subtle animated theme overlay when toggling (JS will toggle .theme-anim on .app) */
+    .app.theme-anim {
+      animation: themePulse 420ms cubic-bezier(.2,.9,.3,1);
+    }
+    @keyframes themePulse {
+      0% { transform: scale(1.007); filter: saturate(1.05) blur(0px); opacity: 0.995; }
+      60% { transform: scale(1.0); filter: saturate(1) blur(0.2px); opacity: 1; }
+      100% { transform: scale(1.0); filter: none; opacity: 1; }
+    }
+
+    .blob{position:absolute;filter:blur(80px);z-index:-1;opacity:0.6}
+    .blob-1{width:400px;height:400px;background:var(--pink);border-radius:50%;top:-120px;left:-120px}
+    .blob-2{width:300px;height:300px;background:rgba(255,179,198,0.9);border-radius:50%;bottom:-80px;right:-80px}
+
+    .app{
+      width:100%;max-width:var(--max-width);height:85vh;background:var(--card);
+      border-radius:32px;box-shadow:0 20px 60px rgba(20,20,30,0.08);
+      display:grid;grid-template-columns:1fr 360px;overflow:hidden;border:1px solid var(--glass-border);
+      backdrop-filter: blur(12px); transition: background var(--theme-transition) ease, box-shadow var(--theme-transition) ease, border-color var(--theme-transition) ease;
+    }
+
+    /* ====== CORREÇÃO CRUCIAL: garantir que flex parents permitam filhos com overflow sem expandir ====== */
+    .app, .left, .right, .player-wrap, .chat {
+      min-height: 0;
+    }
+
+    .left{padding:32px;display:flex;flex-direction:column;gap:20px}
+    header{display:flex;align-items:center;justify-content:space-between}
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{color:var(--pink);font-weight:700;font-size:20px;letter-spacing:-0.5px}
+    .tag{font-size:12px;color:var(--muted)}
+
+    .top-actions{display:flex;gap:10px;align-items:center}
+    .btn{border:0;padding:10px 16px;border-radius:999px;font-weight:600;cursor:pointer;display:inline-flex;gap:8px;align-items:center;justify-content:center;transition:all .18s ease}
+    .btn.primary{Background:var(--pink);color:#fff;box-shadow:0 8px 18px rgba(255,77,121,0.18)}
+    .btn.primary:hover{transform:translateY(-3px);background:var(--pink-2)}
+    .btn.ghost{background:rgba(255,255,255,0.9);color:var(--pink);border:1px solid rgba(255,77,121,0.08)}
+
+    .room-controls{display:flex;gap:8px;align-items:center}
+    .room-controls input[type="text"]{padding:10px 12px;border-radius:12px;border:1px solid #eee;width:220px;outline:none;background:transparent;color:var(--fg)}
+    .player-wrap{flex:1;display:flex;flex-direction:column;gap:16px}
+
+    /* video card */
+    .video-card{ background:transparent;border-radius:20px;position:relative;overflow:visible;display:block; }
+    .video-inner{ background:var(--video-bg);border-radius:20px;padding:12px;overflow:hidden;position:relative;min-height:320px;display:flex;align-items:center;justify-content:center; transition: background var(--theme-transition) ease, box-shadow var(--theme-transition) ease; }
+
+    .placeholder{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; text-align:center; padding:22px; z-index:3; pointer-events:auto; color:rgba(255,255,255,0.95); gap:10px; }
+    .placeholder h3{margin:0;font-size:18px}
+    .placeholder p{margin:0;font-size:13px;color:rgba(255,255,255,0.85)}
+
+    /* video element */
+    video{ position:absolute; inset:0; z-index:2; width:100%; height:100%; display:none; background:#000; object-fit:contain; border-radius:12px; transition: opacity .28s ease; }
+
+    /* container used for youtube player iframe */
+    #yt-player { position:absolute; inset:0; z-index:2; width:100%; height:100%; display:none; border-radius:12px; overflow:hidden; background:#000; transition: opacity .28s ease; }
+
+    #yt-player > div > iframe,
+    #yt-player iframe {
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      border:0;
+      pointer-events: none !important;
+      background: #000;
+    }
+
+    .upload-area{
+      margin-top:12px;
+      display:flex;
+      gap:8px;
+      align-items:center;
+      z-index:4;
+      position:relative;
+      flex-direction:column;
+      align-items:center;
+    }
+
+    .upload-controls{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .file-label{
+      position:relative;display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:999px;background:var(--pink);color:#fff;cursor:pointer;
+      box-shadow:0 8px 18px rgba(255,77,121,0.18);
+      transition:all .18s ease;
+      font-weight:600;
+    }
+    .file-label:hover{
+      transform:translateY(-3px);
+      background:var(--pink-2);
+    }
+    .file-label input[type="file"]{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;cursor:pointer}
+
+    .upload-status {
+      margin-top:8px;
+      color:var(--muted);
+      font-size:13px;
+      min-height:18px;
+      text-align:center;
+      max-width:420px;
+      word-break:break-word;
+    }
+
+    .status-line{
+      color:var(--muted);font-size:13px;margin-left:6px;
+    }
+
+    .right{background: var(--card);border-left:1px solid var(--glass-border);padding:28px;display:flex;flex-direction:column;gap:18px; transition: background var(--theme-transition) ease, border-color var(--theme-transition) ease;}
+    .room-info h2{font-size:18px;margin-bottom:4px;color:var(--fg)}
+    .room-info p{font-size:13px;color:var(--muted)}
+
+    /* chat */
+    .chat{flex:1;background:var(--chat-bg);padding:14px;border-radius:14px;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,0.03); transition: background var(--theme-transition) ease; }
+    /* IMPORTANT: .messages deve ser um flex item com overflow interno sem forçar o pai a crescer */
+    .messages{
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: 100%;
+      overflow: auto;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      padding-right:6px;
+      padding-left:6px;
+      scroll-behavior: smooth;
+      overscroll-behavior: contain;
+    }
+    .msg{background:var(--msg-bg);padding:10px 12px;border-radius:12px;max-width:85%;font-size:13px; color:var(--fg); border: 1px solid rgba(0,0,0,0.02);}
+    .msg.mine{background:var(--pink);color:#fff;align-self:flex-end}
+    .chat-input{display:flex;gap:8px;align-items:center}
+    .chat-input input{flex:1;padding:10px;border-radius:999px;border:1px solid #eee;outline:none;background:transparent;color:var(--fg)}
+
+    .send-btn{
+      width:44px;height:44px;border-radius:50%;background:transparent;color:var(--pink);border:1px solid rgba(255,77,121,0.12);cursor:pointer;
+      display:inline-flex;align-items:center;justify-content:center;font-weight:700;transition:all .14s ease;
+    }
+    .send-btn:hover{transform:translateY(-2px);background:rgba(255,77,121,0.06)}
+    .send-btn svg{width:14px;height:14px;fill:var(--pink)}
+
+    .btn-ctl svg, .send-btn svg, .controls-overlay svg, .file-label svg {
+      shape-rendering: geometricPrecision;
+      image-rendering: optimizeQuality;
+      vector-effect: non-scaling-stroke;
+      display: block;
+    }
+
+    .controls-overlay{
+      position:absolute;
+      left:12px;
+      right:12px;
+      bottom:12px;
+      z-index:5;
+      display:none;
+      align-items:center;
+      gap:10px;
+      justify-content:space-between;
+      pointer-events:none;
+      transition:opacity .22s ease, transform .22s ease;
+      opacity:0;
+      transform:translateY(8px);
+    }
+
+    .controls-overlay.visible{
+      display:flex;
+      pointer-events:auto;
+      opacity:1;
+      transform:translateY(0);
+    }
+
+    .controls-left{display:flex;gap:8px;align-items:center}
+    .controls-center{flex:1;display:flex;align-items:center;gap:12px;padding:0 8px}
+    .controls-right{display:flex;gap:8px;align-items:center;position:relative}
+
+    .btn-ctl{
+      width:36px;height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:var(--control-bg);color:var(--control-fg);border:0;
+      box-shadow:0 6px 14px rgba(0,0,0,0.25);backdrop-filter: blur(6px);cursor:pointer;transition:transform .12s ease, background .12s ease;
+    }
+    .btn-ctl:hover{transform:translateY(-3px);background:rgba(0,0,0,0.5)}
+    .btn-ctl.primary{width:44px;height:44px;border-radius:12px;background:var(--pink);color:#fff;box-shadow:0 10px 22px rgba(255,77,121,0.18)}
+    .btn-ctl svg{width:16px;height:16px;display:block;fill:currentColor}
+
+    .time-small{font-size:12px;color:rgba(255,255,255,0.9);min-width:48px;text-align:center}
+    .progress{
+      height:6px;border-radius:999px;background:rgba(255,255,255,0.08);position:relative;cursor:pointer;flex:1;overflow:hidden;
+    }
+    .progress .bar{position:absolute;left:0;top:0;height:100%;width:0%;background:linear-gradient(90deg,var(--pink),var(--pink-2));border-radius:0px;transition:width .08s linear}
+    .progress .handle{position:absolute;right:0;top:50%;transform:translate(50%,-50%);width:10px;height:10px;border-radius:50%;background:var(--handle-bg);box-shadow:0 6px 12px rgba(0,0,0,0.2);opacity:0;transition:opacity .12s}
+    .progress:hover .handle{opacity:1}
+
+    .btn-ctl.fullscreen svg {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    /* Quality control (three dots) */
+    .video-topbar { position: absolute; top: 8px; right: 8px; z-index: 20; display:flex; gap:8px; align-items:center; pointer-events: none; }
+    .quality-control { position: relative; pointer-events: auto; }
+    .qc-btn {
+      width:40px;height:40px;border-radius:10px;border:0;display:inline-flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.36);color:var(--control-fg);cursor:pointer;
+      box-shadow:0 8px 20px rgba(0,0,0,0.28);backdrop-filter: blur(6px);transition:transform .12s ease, background .12s;
+    }
+    .qc-btn:hover{ transform:translateY(-3px); background:rgba(0,0,0,0.5); }
+    .qc-btn .dots { display:block; font-size:18px; line-height:1; letter-spacing:2px; opacity:0.95; color: #fff; }
+    .qc-menu {
+      position: absolute; top: calc(100% + 10px); right: 0; min-width:170px; border-radius:12px; padding:8px; display:flex; flex-direction:column; gap:6px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(250,250,250,0.94)); color:#111; box-shadow:0 18px 40px rgba(10,10,20,0.12); border:1px solid rgba(0,0,0,0.06);
+      transform-origin: top right; transform: translateY(-6px) scale(0.98); opacity:0; pointer-events:none; transition:opacity .12s, transform .12s;
+    }
+    .qc-menu.visible { transform: translateY(0) scale(1); opacity:1; pointer-events:auto; }
+    .qc-item {
+      background: transparent; border: 0; padding:10px 12px; text-align:left; border-radius:10px; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:space-between;
+    }
+    .qc-item:hover { background: rgba(0,0,0,0.04); }
+    .qc-item[aria-disabled="true"] { opacity:0.5; cursor:not-allowed; }
+    .qc-check { width:18px; height:18px; display:inline-block; border-radius:4px; margin-left:8px; opacity:0; }
+    .qc-item.selected .qc-check { background: linear-gradient(90deg,var(--pink),var(--pink-2)); box-shadow:0 6px 14px rgba(255,77,121,0.12); opacity:1; }
+
+    @media (min-width:1100px){
+      :root{--max-width:1400px}
+      .app{height:92vh;grid-template-columns:1.6fr 360px;padding:28px 36px}
+      .left{padding:40px}
+      .video-inner{min-height:560px}
+    }
+    @media (max-width:980px){
+      .app{grid-template-columns:1fr;height:auto;max-height:none;padding-bottom:40px}
+      .right{order:2}.left{order:1}.video-inner{min-height:320px}
+      .controls-overlay{left:8px;right:8px;bottom:8px}
+      .qc-menu { right: 8px; left: auto; }
+    }
+
+    /* Modal de Apelido (Nickname) */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(20, 20, 30, 0.3);
+      backdrop-filter: blur(8px);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .modal-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-content {
+      background: var(--card);
+      border: 1px solid var(--glass-border);
+      padding: 32px;
+      border-radius: 24px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.12);
+      width: 90%;
+      max-width: 340px;
+      transform: translateY(20px);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      text-align: center;
+    }
+    .modal-overlay.visible .modal-content {
+      transform: translateY(0);
+    }
+    .modal-title {
+      font-size: 18px;
+      color: var(--fg);
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .modal-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin: -8px 0 4px 0;
+    }
+    .modal-input {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid #eee;
+      outline: none;
+      font-size: 14px;
+      background: rgba(255, 255, 255, 0.8);
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+    .modal-input:focus {
+      border-color: var(--pink);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(255,77,121,0.1);
+    }
+    .modal-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .modal-actions .btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 14px;
+    }
+
+    /* estilos para o botão Mudar vídeo (harmoniza com os outros) */
+    #changeVideoBtn {
+      /* start hidden — JS will reveal when appropriate (video present or confirm mode) */
+      display: none;
+      margin-right: 6px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-weight: 600;
+      cursor: pointer;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      transition: transform .18s cubic-bezier(.2,.9,.3,1), box-shadow .18s ease, background .18s ease;
+      background: var(--pink);
+      color: #fff;
+      border: 0;
+      box-shadow: 0 10px 22px rgba(255,77,121,0.18);
+    }
+    #changeVideoBtn:hover {
+      transform: translateY(-3px) scale(1.02);
+      background: var(--pink-2);
+    }
+    #changeVideoBtn:focus { outline: 0; box-shadow: 0 10px 28px rgba(255,77,121,0.22); transform: translateY(-2px) }
+    #changeVideoBtn.pulse { animation: pulseGlow 2s ease-in-out infinite; }
+
+    @keyframes pulseGlow {
+      0% { box-shadow: 0 8px 18px rgba(255,77,121,0.12); transform: translateY(0) scale(1); }
+      50% { box-shadow: 0 18px 36px rgba(255,77,121,0.18); transform: translateY(-2px) scale(1.01); }
+      100% { box-shadow: 0 8px 18px rgba(255,77,121,0.12); transform: translateY(0) scale(1); }
+    }
+
+    /* theme toggle button (in header) */
+    #themeToggle {
+      width:44px;height:44px;border-radius:12px;border:0;display:inline-flex;align-items:center;justify-content:center;
+      background: rgba(255,255,255,0.9); color: var(--pink); cursor:pointer; box-shadow:0 8px 20px rgba(10,10,20,0.06);
+      transition: background var(--theme-transition), transform .12s ease, box-shadow .12s;
+    }
+    #themeToggle:hover { transform: translateY(-3px); background: rgba(255,255,255,1); }
+    body.dark #themeToggle { background: rgba(255,255,255,0.06); color: var(--muted); box-shadow: none; }
+
+    /* Chat scrollbar styling (visible & usable) */
+    .messages::-webkit-scrollbar { width:10px; }
+    .messages::-webkit-scrollbar-thumb { border-radius:999px; background: linear-gradient(180deg, rgba(0,0,0,0.12), rgba(0,0,0,0.06)); }
+    body.dark .messages::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); }
+
+    /* "Novas mensagens" button when user scrolled up */
+    #newMsgBtn {
+      position: absolute;
+      right: 32px;
+      bottom: 110px;
+      z-index: 30;
+      background: var(--pink);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-weight:700;
+      display:none;
+      box-shadow:0 12px 28px rgba(0,0,0,0.16);
+      cursor:pointer;
+      transition: transform .12s ease, opacity .12s ease;
+    }
+
+    /* ===== New: Lobby styles (FULLSCREEN now) ===== */
+    .lobby-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9998;
+      display: none; /* start hidden - we'll open on load by script */
+      align-items: stretch;
+      justify-content: stretch;
+      background: linear-gradient(180deg, rgba(10,10,12,0.28), rgba(10,10,12,0.45));
+      backdrop-filter: blur(6px);
+      padding: 0;
+    }
+    .lobby {
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      border-radius: 0;
+      padding: 28px;
+      box-shadow: none;
+      border: none;
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 18px;
+      /* adapt to theme using CSS variables */
+      background: linear-gradient(180deg, var(--bg2), var(--bg1));
+      overflow: auto;
+    }
+    .lobby-left {
+      display:flex;flex-direction:column;gap:12px;padding-right:12px;
+    }
+
+    /* Lobby header layout: ensure create + close stay together and never overflow */
+    .lobby-header {
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      flex-wrap:nowrap;
+      position: relative;
+    }
+    /* keep title at left and actions at right; actions will be pushed to right by margin-left:auto */
+    .lobby-actions {
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-shrink:0;
+      margin-left:auto; /* pushes to the far right */
+    }
+
+    .search-bar {
+      display:flex;gap:10px;align-items:center;
+    }
+    .search-input {
+      padding:10px 12px;border-radius:12px;border:1px solid var(--glass-border);outline:none;background:transparent;color:var(--fg);min-width:320px;
+      box-shadow: inset 0 1px 0 rgba(0,0,0,0.02);
+    }
+    .create-room-btn {
+      min-width:150px;
+      margin-left:auto;
+    }
+
+    /* group for the action buttons so they stay inline and can wrap neatly */
+    /* .lobby-actions defined above with margin-left:auto to place at top-right */
+
+    .rooms-list {
+      display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:8px;
+    }
+    .room-card {
+      background: linear-gradient(180deg, var(--lobby-bg-panel), var(--lobby-bg-panel));
+      border-radius:14px;padding:12px;border:1px solid var(--glass-border);box-shadow:0 8px 20px rgba(10,10,20,0.04);
+      display:flex;flex-direction:column;gap:8px;
+      color:var(--fg);
+    }
+    .room-name { font-weight:700;color:var(--fg);font-size:14px; }
+    .room-meta { font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px; }
+    .room-actions { margin-top:8px; display:flex;gap:8px;align-items:center;justify-content:flex-end; }
+    .lock { width:18px;height:18px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.04);font-size:12px;color:var(--muted) }
+
+    .lobby-right {
+      background: linear-gradient(180deg, var(--lobby-bg-panel), var(--lobby-bg-panel));
+      border-radius:12px;padding:14px;border:1px solid var(--glass-border);
+      display:flex;flex-direction:column;gap:12px;height:100%;
+      box-shadow:0 18px 40px rgba(10,10,20,0.06);
+      color:var(--fg);
+    }
+    .lobby-empty { color:var(--muted);font-size:13px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.01) }
+
+    .modal-compact { max-width:420px; width:100%; }
+     
+
+    /* ROOM THUMBNAIL (lobby) */
+.room-thumb {
+  width: 100%;
+  height: 120px;                /* ajuste se preferir outro tamanho */
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(0,0,0,0.04), rgba(0,0,0,0.02));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.room-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 0; /* mantendo o container com radius */
+}
+@media (min-width:1100px){
+  .room-thumb { height: 140px; }
+}
+
+
+    #fecharBtn {
+    display: none;
+    }
+    /* small responsive */
+    @media (max-width:900px){
+      .lobby { grid-template-columns: 1fr; padding:14px; }
+      .search-input { min-width:160px; width:100%;}
+      .rooms-list { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+      /* keep lobby actions accessible on small screens */
+      .lobby-actions { width: 100%; justify-content: flex-end; }
+    }
+
+    /* NEW button: Return to room (safe replacement for old close button)
+       - starts hidden; shown only after create/join
+       - displayed inline next to 'Criar sala' and also has a fixed variant for persistent access
+    */
+    #returnToRoomBtn {
+      display: none !important;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    /* when we want it fixed in corner while in-room */
+    #returnToRoomBtn.return-fixed {
+      position: fixed !important;
+      top: 18px !important;
+      right: 18px !important;
+      z-index: 10001 !important;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    }
+
+    
+    #openCreateBtn{
+      position: relative;
+  left: 384px;
+}
+    #lobbySearch{
+      position: relative;
+  left: 374px;
+    }
+
+    #fecharBtn {
+      position: relative;
+  left: 394px;
+    }
+
+    #themeToggle{
+  background: #ffffff !important;
+}
+
+
+
+.controls-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative; /* só para referência de posição dos filhos absolutos */
+}
+
+#forwardBtn {
+  width: 28px;    /* largura */
+  height: 28px;  
+}
+
+#backBtn {
+  width: 28px;    /* largura */
+  height: 28px;  
+}
+
+#playBtn {
+  width: 28px;    /* largura */
+  height: 28px;   
+}
+
+#fsBtn {
+  width: 28px;    /* largura */
+  height: 28px;   
+}
+
+#muteBtn {
+  width: 28px;    /* largura */
+  height: 28px;   
+}
+
+#VolBtn{
+width:28px;
+height:28px;
+
+padding:0;
+
+display:flex;
+align-items:center;
+justify-content:center;
+}
+
+
+
+/* container header dentro do painel direito */
+.room-info { padding-right: 48px; /* espaço para o botão, opcional */ }
+
+/* novo header row */
+.room-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* esquerda (título) deve poder encolher sem empurrar */
+.room-header-left {
+  min-width: 0;           /* CRUCIAL: permite que o texto encolha em flex containers */
+  overflow: hidden;
+}
+
+/* título com truncamento se estiver muito longo */
+.room-title {
+  font-size: 18px;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ações (botões) alinhados à direita */
+.room-header-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* btn-ctl já existe no seu CSS — ele combina bem. */
+.room-header-actions .btn-ctl { width:40px; height:40px; }
+
+.participants-btn,
+.btn-ctl {
+  background: #ffffff;
+  color: #000000; /* svg com fill="currentColor" acompanha essa cor */
+  border: 0;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.08);
+  transition: background .18s ease, color .18s ease, transform .12s ease;
+}
+
+/* garantir que o svg herde a cor */
+.participants-btn svg,
+.btn-ctl svg {
+  fill: currentColor;
+}
+
+/* ===== 1) Método recomendado: dentro de um container flex =====
+   - botoes em um container .room-header-actions (ou similar).
+   - o botão “empurra” para a direita usando margin-left:auto. */
+.room-header-actions { display: flex; align-items: center; gap: 8px; }
+.room-header-actions .participants-btn { margin-left: auto; margin-right: 8px; }
+
+/* hover/focus: não vira preto — apenas leve escurecimento no fundo */
+.participants-btn:hover,
+.btn-ctl:hover,
+.participants-btn:focus,
+.btn-ctl:focus {
+  transform: translateY(-2px);
+  outline: none;
+  background: #f2f2f2;  /* leve mudança, NADA de preto */
+  color: #000000;
+}
+
+/* tema escuro: inverter cores e controlar hover também */
+body.dark .participants-btn,
+body.dark .btn-ctl {
+  background: #ffffff;
+  color: #000000;   /* ← SVG fica preto */
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+}
+
+body.dark .participants-btn:hover,
+body.dark .btn-ctl:hover {
+  background: #ffffff;
+  color: #000000;
+}
+
+
+/* ===== 2) Alternativa: se o botão for absolutamente posicionado dentro do painel =====
+   Use se a estrutura HTML não for flex ou você quer posicionamento exato. */
+.room-info { position: relative; } /* container pai */
+.participants-btn.absolute {
+  position: absolute;
+  top: 8px;    /* ajuste fino vertical */
+  right: -62px; /* distância da borda direita */
+  margin-left: 0; /* garantir sem margin auto */
+}
+
+
+/* empurra o botão participantes para a direita usando o id existente */
+.room-header-actions #participantsBtn {
+  margin-left: auto;
+  margin-right: -62px; /* ajuste a distância da borda direita */
+  display: inline-flex; /* garante alinhamento */
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===== PARTICIPANTS OVERLAY (sobrepoe chat) ===== */
+.participants-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 120; /* acima do chat e outros elementos */
+  background: #ffffff;
+  color: #000000;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transform: translateY(10px) scale(0.995);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .28s cubic-bezier(.2,.9,.25,1), opacity .22s ease;
+}
+
+/* visible state */
+.participants-overlay.visible {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* header of overlay */
+.participants-overlay .participants-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.participants-overlay .participants-title {
+  font-weight:700;
+  font-size:15px;
+  letter-spacing:-0.2px;
+}
+.participants-overlay .participants-count {
+  font-size:13px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+/* close button (X) */
+.participants-overlay .participants-close {
+  background: transparent;
+  border: 0;
+  color: rgba(0, 0, 0, 0.85);
+  width:40px;
+  height:40px;
+  border-radius:8px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+.participants-overlay .participants-close:hover {
+  background: rgba(255,255,255,0.04);
+  transform: translateY(-2px);
+}
+
+
+.participants-list {
+  margin-top:8px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding-right:6px;
+  max-height: 300px;       /* altura máxima real */
+  min-height: 0;           /* evita bug do scroll inicial */
+  overflow-y: hidden;      /* por padrão não mostra scrollbar */
+  transition: overflow-y 0.2s ease;
+}
+
+/* quando houver muitos itens, ativar scroll via JS */
+.participants-list.scrollable {
+  overflow-y: auto;
+}
+
+
+/* item */
+.participant-item {
+  display:flex;
+  gap:10px;
+  align-items:center;
+  padding:10px;
+  border-radius:12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25) inset;
+  transform: translateY(8px);
+  opacity: 0;
+  animation: popIn .22s ease forwards;
+}
+.participant-item .avatar {
+  min-width:40px;
+  min-height:40px;
+  width:40px;
+  height:40px;
+  border-radius:10px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  font-size:14px;
+  color:#fff;
+  background: linear-gradient(90deg, rgba(255,77,121,0.95), rgba(255,46,99,0.95));
+  flex-shrink:0;
+}
+.participant-item .p-meta { display:flex;flex-direction:column; }
+.participant-item .p-name { font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.participant-item .p-sub { font-size:12px; color: rgba(0, 0, 0, 0.75); margin-top:2px; }
+
+/* stagger keyframes (items animate in when overlay visible) */
+@keyframes popIn {
+  to { transform: none; opacity:1; }
+}
+
+/* small screens tweak */
+@media (max-width:900px){
+  .participants-overlay { border-radius: 8px; padding:10px; }
+  .participant-item { padding:8px; }
+}
+
+/* =========================
+   BANNER SYNCWAVE (corrigido)
+   Não sobrepõe controles do lobby; empurra o conteúdo para baixo.
+   Troque as cores alterando --site-primary / --site-secondary abaixo.
+   ========================= */
+
+:root{
+  --syncwave-banner-height: 64px;       /* altura do banner - ajuste se quiser */
+  --site-primary:  #FF4D79;             /* cor primária (troque aqui) */
+  --site-secondary:#FF2E63;             /* cor secundária (troque aqui) */
+  --syncwave-text: #ffffff;
+  --syncwave-padding-x: 18px;
+  --syncwave-font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+/* GARANTE QUE O .lobby TEM CONTEXTO RELATIVO (necessário para posicionamento absoluto do banner) */
+.lobby {
+  position: relative;     /* importante */
+  padding-top: var(--syncwave-banner-height); /* empurra TODO o conteúdo para baixo do banner */
+}
+
+/* Banner: posicionado no topo do .lobby, visual por cima, mas conteúdo não é sobreposto graças ao padding-top acima */
+.lobby .syncwave-banner {
+  position: absolute;    /* visual fica "fixo" no topo do diálogo do lobby */
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--syncwave-banner-height);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--syncwave-padding-x);
+  gap: 12px;
+  background: linear-gradient(90deg, var(--site-primary), var(--site-secondary));
+  color: var(--syncwave-text);
+  font-family: var(--syncwave-font);
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  z-index: 999; /* fica acima do conteúdo visualmente, mas não o sobrepõe por causa do padding */
+  box-shadow: 0 6px 18px rgba(2,6,23,0.08);
+  border-radius: 8px 8px 0 0; /* opcional: canto arredondado superior */
+}
+
+/* Texto "SyncWave" no canto esquerdo */
+.lobby .syncwave-banner .brand {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+/* Responsivo: banner menor em telas pequenas */
+@media (max-width: 480px){
+  :root { --syncwave-banner-height: 56px; --syncwave-padding-x: 12px; }
+  .lobby .syncwave-banner { font-size: 0.95rem; }
+}
+
+/* --- Caso existam elementos posicionados 'absolute' ou 'fixed' específicos que ainda estejam sobrepondo,
+   forçamos eles a respeitarem o espaço do banner adicionando um deslocamento mínimo.
+   Use com parcimônia; se você souber os seletores exatos dos botões podemos ajustar só aqueles. */
+.lobby .lobby-header,
+.lobby .lobby-actions,
+.lobby .lobby-left,
+.lobby .lobby-right,
+.lobby .controls {
+  /* este margin-top só age se esses elementos estiverem no fluxo (não tem efeito sobre items fixed),
+     mas resolve a maioria dos casos onde os botões estavam visualmente no topo */
+  margin-top: 8px;
+}
+
+/* Caso algum botão dentro do lobby tenha position: absolute/fixed e esteja cobrindo o banner,
+   podemos empurrá-lo com um override específico (apenas se necessário):
+   .lobby .btn.sua-classe { transform: translateY(var(--syncwave-banner-height)); }
+*/
+
+.btn.primary {
+  background-color: #FF2E63 !important;
+  border-color: #FF2E63 !important;
+  color: #fff; /* texto branco para contraste */
+}
+
+.btn.primary:hover {
+  background-color: #e02456 !important; /* ligeiro hover */
+}
+
+#changeVideoBtn {
+  background-color: #FF2E63 !important;
+  border-color: #FF2E63 !important;
+  color: #fff; /* texto branco para contraste */
+}
+
+#changeVideoBtn:hover {
+  background-color:  #e02456 !important;
+}
+
+
+#uploadBtn {
+  background-color: #FF2E63 !important;
+  border-color: #FF2E63 !important;
+  color: #fff; /* texto branco para contraste */
+}
+#uploadBtn:hover {
+  background-color:  #e02456 !important;
+}
+
+
+
+
+label.file-label {
+  background-color: #FF2E63;
+  color: #fff;
+}
+
+.messages .msg {
+  background-color: #FF2E63; /* mesma cor do btn primary */
+  color: #fff;               /* texto branco */
+}
+
+#lobbyEmptyNote {
+  display: flex;               /* centraliza facilmente */
+  justify-content: center;     /* centraliza horizontalmente */
+  align-items: center;         /* centraliza verticalmente */
+  height: 100%;                /* ocupa todo o container pai */
+  text-align: center;          /* centraliza o texto */
+  font-size: 16px;
+  color: var(--muted);         /* mantém a cor do texto */
+  background: transparent !important;  /* remove qualquer fundo existente */
+  box-shadow: none !important;         /* remove sombra, se houver */
+  border: none !important;             /* remove borda, se houver */
+}
+
+#controlsOverlay .btn.primary:active,
+#controlsOverlay .btn.primary:focus {
+    transform: none !important;      /* remove qualquer deslocamento */
+    box-shadow: none !important;     /* remove sombra de clique */
+    outline: none !important;        /* remove contorno de foco */
+}
+
+.room-card-thumb{
+width:100%;
+height:90px;
+overflow:hidden;
+border-radius:8px;
+margin-bottom:6px;
+background:#111;
+}
+
+.room-card-thumb img{
+width:100%;
+height:100%;
+object-fit:cover;
+display:block;
+}
+
+.host-badge{
+  color:#ffd166;
+  font-size:12px;
+  margin-left:6px;
+  font-weight:600;
+}
+
+.player-btn{
+width:40px;
+height:40px;
+
+border-radius:50%;
+border:none;
+
+background:#FF2E63;
+
+display:flex;
+align-items:center;
+justify-content:center;
+
+cursor:pointer;
+
+transition:transform .15s;
+}
+
+/* clique */
+.player-btn:active{
+transform:scale(0.9);
+}
+
+/* SVG dentro do botão */
+.player-btn svg{
+width:18px;
+height:18px;
+
+fill:white;      /* deixa o ícone branco */
+stroke:white;    /* caso seja ícone com stroke */
+}
+
+.progress{
+height:6px;
+border-radius:999px;
+background:rgba(241, 236, 236, 0.874);
+position:relative;
+cursor:pointer;
+flex:1;
+overflow:hidden;
+}
+
+.progress .bar{
+position:absolute;
+left:0;
+top:0;
+height:100%;
+width:0%;
+background:linear-gradient(90deg,var(--pink),var(--pink-2));
+border-radius:0;
+transition:width .08s linear;
+}
+
+.progress .handle{
+position:absolute;
+left:0; /* mudar de right para left */
+top:50%;
+transform:translate(-50%,-50%);
+
+width:10px;
+height:10px;
+
+border-radius:50%;
+background:var(--handle-bg);.volume-box{
+display:flex;
+align-items:center;
+gap:8px;
+}
+
+.volume-slider{
+width:0;
+opacity:0;
+transition:width .25s ease, opacity .2s;
+
+accent-color:#FF2E63;
+cursor:pointer;
+}
+
+/* quando abrir */
+.volume-box.active .volume-slider{
+width:110px;
+opacity:1;
+}
+
+box-shadow:0 6px 12px rgba(0,0,0,0.2);
+opacity:0;
+
+transition:opacity .12s;
+}
+
+.progress:hover .handle{
+opacity:1;
+}
+
+.volume-box{
+position:relative;
+display:flex;
+align-items:center;
+}
+
+.volume-slider{
+position:absolute;
+
+bottom:30px; /* abre acima do botão */
+left:50%;
+transform:translateX(-50%);
+
+width:110px;
+
+opacity:0;
+pointer-events:none;
+
+transition:opacity .2s ease;
+
+accent-color:#FF2E63;
+}
+
+/* slider ativo */
+.volume-box.active .volume-slider{
+opacity:1;
+pointer-events:auto;
+}
+
+
+  </style>
+</head>
+<body>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+
+  <!-- app starts hidden to avoid visual flash; will be revealed after entering/creating a room -->
+  <div class="app initial-hidden" role="application" id="appRoot">
+    <div class="left">
+      <header>
+        <div class="brand">
+          <div class="logo">SyncWave.</div>
+          <div class="tag"></div>
+        </div>
+
+        <div class="top-actions">
+          <div class="room-controls" id="headerRoomControls" aria-hidden="true" style="display:none">
+            <!-- Criar/Entrar antigos foram movidos para o Lobby -->
+            <input id="roomInput" type="text" placeholder="Nome da sala (ex: sala123)" />
+            <button id="createBtn" class="btn primary">Criar sala</button>
+            <button id="joinBtn" class="btn primary">Entrar</button>
+          </div>
+
+          <!-- Botão Mudar (solicitado) -->
+          <button id="changeVideoBtn" class="btn primary" title="Mudar vídeo" aria-label="Mudar vídeo" style="display:none">
+            Mudar Video
+          </button>
+
+           <button id="leaveRoomBtn" class="btn primary">
+          Sair da sala
+          </button>
+          
+
+          <!-- You asked to add a Lobby button and keep it -->
+          <button id="openLobbyBtn" class="btn primary" title="Abrir Lobby" aria-label="Abrir Lobby" style="margin-right:8px;">
+            Lobby
+          </button>
+
+
+          
+
+
+          <button id="themeToggle" aria-pressed="false" title="Alternar modo escuro" aria-label="Alternar modo escuro">
+            <svg id="themeIcon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6.76 4.84l-1.8-1.79L3.17 4.84l1.79 1.8 1.8-1.8zM1 13h3v-2H1v2zm10 9h2v-3h-2v3zM17.24 4.84l1.79-1.8 1.79 1.8-1.8 1.79-1.78-1.79zM20 11v2h3v-2h-3zM12 5a7 7 0 100 14 7 7 0 000-14z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="player-wrap">
+        <div class="video-card" id="videoCard">
+          <div class="video-inner" id="videoInner">
+            <div class="placeholder" id="placeholder">
+              <svg viewBox="0 0 24 24" style="width:56px;height:56px;margin-bottom:10px;opacity:0.9"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+              <h3>Nenhum vídeo em reprodução</h3>
+              <p>Faça o upload para assistir com seus amigos</p>
+
+              <div class="upload-area">
+                <div class="upload-controls">
+                  <label class="file-label">Selecionar vídeo
+                    <input id="fileInput" type="file" accept="video/mp4,video/*">
+                  </label>
+                  <button id="uploadBtn" class="btn primary" disabled>Enviar Vídeo</button>
+                </div>
+
+                <!-- YouTube agora é um botão idêntico ao 'Selecionar vídeo' e sem modal -->
+                <div style="margin-top:10px;">
+                    <button id="youtubeBtn" class="btn primary" title="Adicionar vídeo do YouTube">
+                      YouTube
+                    </button>
+                  </div>
+
+                <div class="upload-status"><span id="uploadStatus"></span></div>
+              </div>
+            </div>
+
+            <video id="video" playsinline></video>
+            <div id="yt-player" aria-live="polite"></div>
+
+            <!-- CONTROLS OVERLAY (substitua todo o bloco existente desse comentário até o fim do overlay) -->
+<div class="controls-overlay" id="controlsOverlay" aria-hidden="true">
+  <div class="controls-left">
+    <button class="player-btn" id="backBtn" title="Retroceder 10s" aria-label="Retroceder 10 segundos">
+      <svg viewBox="0 0 24 24"><path d="M11 18V6l-8 6 8 6zm10 0V6l-8 6 8 6z"/></svg>
+    </button>
+
+    <button class="player-btn" id="playBtn" title="Play/Pause" aria-label="Play/Pausar">
+      <svg id="ctlPlay" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      <svg id="ctlPause" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+    </button>
+
+    <button class="player-btn" id="forwardBtn" title="Avançar 10s" aria-label="Avançar 10 segundos">
+      <svg viewBox="0 0 24 24"><path d="M3 6v12l8.5-6L3 6zm10 0v12l8.5-6L13 6z"/></svg>
+    </button>
+  </div>
+
+  <div class="controls-center">
+    <div class="time-small" id="currentTime">0:00</div>
+    <div class="progress" id="progress">
+      <div class="bar" id="progressBar"></div>
+    </div>
+    <div class="time-small" id="duration">0:00</div>
+  </div>
+
+  <div class="controls-right">
+    <!-- Mute -->
+    <div class="volume-box">
+
+<button class="player-btn" id="VolBtn" title="Volume" aria-label="Volume">
+  <svg id="volIcon" viewBox="0 0 24 24">
+    <path d="M3 9v6h4l5 5V4L7 9H3z"/>
+    <path d="M16 8c1.5 1.5 1.5 6.5 0 8" fill="none" stroke="white" stroke-width="2"/>
+    <path d="M19 5c3 3 3 11 0 14" fill="none" stroke="white" stroke-width="2"/>
+  </svg>
+</button>
+
+<input type="range" id="volumeSlider" class="volume-slider"
+min="0" max="1" step="0.01" value="1">
+
+</div>
+
+
+
+    <!-- Fullscreen (AGORA dentro do mesmo controls-right) -->
+    <button class="player-btn" id="fsBtn" title="Tela cheia" aria-label="Tela cheia">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path d="M3 9V6a1 1 0 0 1 1-1h3"/>
+        <path d="M21 9V6a1 1 0 0 0-1-1h-3"/>
+        <path d="M3 15v3a1 1 0 0 0 1 1h3"/>
+        <path d="M21 15v3a1 1 0 0 1-1 1h-3"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+
+
+            <!-- Quality control (three dots) - appears only when video is loaded -->
+            <div class="video-topbar" aria-hidden="true">
+              <div class="quality-control" id="qualityControl" hidden>
+                <button id="qualityBtn" class="qc-btn" aria-haspopup="true" aria-expanded="false" title="Qualidade do vídeo">
+                  <span class="dots" aria-hidden="true">⋯</span>
+                </button>
+
+                <div class="qc-menu" id="qualityMenu" role="menu" aria-hidden="true">
+                  <!-- items injected dynamically -->
+                </div>
+              </div>
+            </div>
+            <!-- END -->
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="color:var(--muted);font-size:13px" id="status">Conectando...</div>
+          <div style="color:var(--muted);font-size:13px" id="qualityLabel">Qualidade: -</div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="right">
+      <div class="room-info">
+  <div class="room-header" role="presentation">
+    <div class="room-header-left">
+      <h2 id="roomTitle" class="room-title">Sala</h2>
+      <p id="roomCount" class="room-count">0 pessoas assistindo</p>
+    </div>
+
+    <div class="room-header-actions">
+      <button id="participantsBtn" class="btn-ctl" title="Participantes" aria-label="Participantes">
+        <!-- ícone de bonecos -->
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V20h14v-3.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V20h6v-3.5C23 14.17 18.33 13 16 13z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+      <div class="chat" id="chatArea" style="position:relative">
+        <div class="messages" id="messages">
+          <div class="msg">Bem-vindo à sala!</div>
+        </div>
+
+        <button id="newMsgBtn">Novas mensagens</button>
+
+        <div class="chat-input">
+          <input id="chatInput" type="text" placeholder="Digite uma mensagem..." />
+          <button id="sendBtn" class="send-btn" title="Enviar mensagem" aria-label="Enviar mensagem">
+            <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ---------- Lobby Overlay (FULLSCREEN) ---------- -->
+  <div class="lobby-overlay" id="lobbyOverlay" aria-hidden="true">
+    <div class="lobby" role="dialog" aria-modal="true" aria-label="Salas">
+      <header class="syncwave-banner" role="banner" aria-label="Banner SyncWave">
+  <div class="brand" aria-hidden="false">
+    <span>SyncWave.</span>
+  </div>
+  <!-- Se quiser um botão pequeno à direita (opcional), descomente:
+  <div style="margin-left:auto">
+    <button aria-label="Ajuda" class="banner-cta">?</button>
+  </div>
+  -->
+</header>
+      <div class="lobby-left">
+        <div class="lobby-header">
+          <div>
+            <div style="font-weight:700;font-size:18px">Salas Disponíveis</div>
+            <div style="font-size:13px;color:var(--muted)"></div>
+          </div>
+          <div class="lobby-actions" style="display:flex;align-items:center;gap:8px">
+            <div class="search-bar">
+              <input id="lobbySearch" class="search-input" placeholder="Procurar sala..." />
+            </div>
+            <button id="openCreateBtn" class="btn primary create-room-btn">Criar sala</button>
+
+            <button id="fecharBtn" class="btn primary">Fechar</button>
+            
+
+            <!-- NEW: Return to room button (replacement for old close button) -->
+            <button id="returnToRoomBtn" class="btn ghost" title="Voltar para a sala" aria-label="Voltar para a sala">Voltar para a sala</button>
+          </div>
+        </div>
+
+        <div id="roomsContainer" class="rooms-list" aria-live="polite">
+          <!-- dynamically added room cards -->
+        </div>
+
+        <div id="lobbyEmptyNote" class="lobby-empty" style="display:none">Nenhuma sala encontrada. Crie a sua!</div>
+      </div>
+
+  <!-- ---------- Create Room Modal (NEW compact) -->
+  <div class="modal-overlay" id="createModal" aria-hidden="true" style="display:none">
+    <div class="modal-content modal-compact">
+      <h3 class="modal-title">Criar Nova Sala</h3>
+      <p class="modal-subtitle">Escolha um nome, senha opcional, e seu apelido (host entra direto).</p>
+
+      <input id="createRoomName" class="modal-input" placeholder="Nome da sala (ex: sala123)" maxlength="40" />
+      <input id="createRoomPass" class="modal-input" placeholder="Senha (opcional)" maxlength="40" />
+      <input id="createRoomNick" class="modal-input" placeholder="Seu apelido" maxlength="40" />
+
+      <div class="modal-actions">
+        <button id="createConfirmBtn" class="btn primary">Criar e Entrar</button>
+        <button id="createCancelBtn" class="btn ghost">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Join Prompt Modal (NEW) -->
+  <div class="modal-overlay" id="joinModal" aria-hidden="true" style="display:none">
+    <div class="modal-content modal-compact">
+      <h3 class="modal-title">Entrar na Sala</h3>
+      <p class="modal-subtitle" id="joinModalSubtitle">Informe os dados para entrar</p>
+
+      <input id="joinRoomPass" class="modal-input" placeholder="Senha (se a sala tiver)" maxlength="40" />
+      <input id="joinRoomNick" class="modal-input" placeholder="Seu apelido (ex: Maria)" maxlength="40" />
+
+      <div class="modal-actions">
+        <button id="joinConfirmBtn" class="btn primary">Entrar</button>
+        <button id="joinCancelBtn" class="btn ghost">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Modal 'Como quer ser chamado?' (legacy kept) -->
+  <div class="modal-overlay" id="nickModal" aria-hidden="true" style="display:none">
+    <div class="modal-content">
+      <h3 class="modal-title">Como quer ser chamado?</h3>
+      <p class="modal-subtitle">Digite seu nome para o chat da sala</p>
+      <div class="modal-actions">
+        <input type="text" id="nickInput" class="modal-input" placeholder="Seu apelido..." autocomplete="off" maxlength="40" />
+        <button id="nickSaveBtn" class="btn primary">Entrar na Sala</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // elements (many from original)
+    const socket = io();
+    const roomInput = document.getElementById('roomInput');
+    const createBtn = document.getElementById('createBtn');
+    const joinBtn = document.getElementById('joinBtn');
+    const statusEl = document.getElementById('status');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileInput = document.getElementById('fileInput');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const video = document.getElementById('video');
+    const ytContainer = document.getElementById('yt-player');
+    const placeholder = document.getElementById('placeholder');
+    const roomTitle = document.getElementById('roomTitle');
+    const roomCount = document.getElementById('roomCount');
+    const messages = document.getElementById('messages');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const videoInner = document.getElementById('videoInner');
+    const changeVideoBtn = document.getElementById('changeVideoBtn');
+    const appRoot = document.getElementById('appRoot');
+    const leaveRoomBtn = document.getElementById("leaveRoomBtn");
+
+    // quality elements
+    const qualityControl = document.getElementById('qualityControl');
+    const qualityBtn = document.getElementById('qualityBtn');
+    const qualityMenu = document.getElementById('qualityMenu');
+    const qualityLabel = document.getElementById('qualityLabel');
+
+    // controls
+    const controlsOverlay = document.getElementById('controlsOverlay');
+    const playBtn = document.getElementById('playBtn');
+    const ctlPlay = document.getElementById('ctlPlay');
+    const ctlPause = document.getElementById('ctlPause');
+    const backBtn = document.getElementById('backBtn');
+    const forwardBtn = document.getElementById('forwardBtn');
+
+    const volIcon = document.getElementById('volIcon');
+    const fsBtn = document.getElementById('fsBtn');
+    const progress = document.getElementById('progress');
+    const progressBar = document.getElementById('progressBar');
+    const currentTimeEl = document.getElementById('currentTime');
+    const durationEl = document.getElementById('duration');
+
+
+
+    // modal nickname elements
+    const nickModal = document.getElementById('nickModal');
+    const nickInput = document.getElementById('nickInput');
+    const nickSaveBtn = document.getElementById('nickSaveBtn');
+
+    // youtube & top buttons
+    const youtubeBtn = document.getElementById('youtubeBtn');
+
+    // theme elements
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const NEW_MESSAGE_BTN = document.getElementById('newMsgBtn');
+
+    // lobby elements (new)
+    const lobbyOverlay = document.getElementById('lobbyOverlay');
+    const openLobbyBtn = document.getElementById('openLobbyBtn');
+    // replaced old closeLobbyBtn entirely with returnToRoomBtn
+    const returnToRoomBtn = document.getElementById('returnToRoomBtn');
+    const openCreateBtn = document.getElementById('openCreateBtn');
+    const roomsContainer = document.getElementById('roomsContainer');
+    const lobbySearch = document.getElementById('lobbySearch');
+    const lobbyStats = document.getElementById('lobbyStats');
+    const lobbyEmptyNote = document.getElementById('lobbyEmptyNote');
+
+    // NEW fechar button
+    const fecharBtn = document.getElementById('fecharBtn');
+
+    // create / join modals (new)
+    const createModal = document.getElementById('createModal');
+    const createRoomName = document.getElementById('createRoomName');
+    const createRoomPass = document.getElementById('createRoomPass');
+    const createRoomNick = document.getElementById('createRoomNick');
+    const createConfirmBtn = document.getElementById('createConfirmBtn');
+    const createCancelBtn = document.getElementById('createCancelBtn');
+
+    const joinModal = document.getElementById('joinModal');
+    const joinRoomPass = document.getElementById('joinRoomPass');
+    const joinRoomNick = document.getElementById('joinRoomNick');
+    const joinConfirmBtn = document.getElementById('joinConfirmBtn');
+    const joinCancelBtn = document.getElementById('joinCancelBtn');
+    const joinModalSubtitle = document.getElementById('joinModalSubtitle');
+       
+    let nickname = '';
+    function askNick() {
+      nickModal.classList.add('visible');
+      nickModal.setAttribute('aria-hidden', 'false');
+      nickModal.style.display = 'flex';
+      setTimeout(() => nickInput.focus(), 100);
+    }
+    function saveNick() {
+      const n = nickInput.value.trim();
+      nickname = n ? n.slice(0, 40) : ('Guest' + Math.floor(Math.random() * 9000 + 1000));
+      nickModal.classList.remove('visible');
+      nickModal.setAttribute('aria-hidden', 'true');
+      nickModal.style.display = 'none';
+    }
+    nickSaveBtn.addEventListener('click', saveNick);
+    nickInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveNick(); } });
+
+    // state
+    let room = '';
+    let isHost = false;
+    let syncing = false;
+    const SEEK_THRESHOLD = 0.6;
+    const DEBOUNCE_MS = 200;
+    let lastEmit = 0;
+    let lastAppliedTs = 0;
+    let idleTimeout = null;
+
+    let originalSrc = null;
+    let qualitiesMap = null;
+    let currentQuality = 'Auto';
+
+    // YouTube state
+    let isYouTube = false;
+    let ytPlayer = null;
+    let ytApiReady = false;
+    let ytPollInterval = null;
+
+    // NEW: confirmation mode state for "Mudar vídeo" -> "Enviar (temporário)"
+    let changeMode = false;
+    let pendingFile = null;           // File object waiting to be uploaded on confirmation
+    let pendingYouTube = null;        // { id, raw } waiting to be sent on confirmation
+
+    function nowMs(){ return Date.now(); }
+    function logStatus(t){ statusEl.textContent = t; }
+    function safeEmit(event, payload){
+      const t = nowMs();
+      if (t - lastEmit < DEBOUNCE_MS) return;
+      lastEmit = t;
+      socket.emit(event, payload);
+    }
+
+    // ------------------------
+    // THEME: dark mode toggling + persistence + animation
+    // ------------------------
+    const THEME_KEY = 'syncwave-theme';
+    function applyTheme(theme, animate=true){
+      try {
+        if (theme === 'dark') {
+          document.body.classList.add('dark');
+          themeToggle.setAttribute('aria-pressed','true');
+          themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
+        } else {
+          document.body.classList.remove('dark');
+          themeToggle.setAttribute('aria-pressed','false');
+          themeIcon.innerHTML = '<path d="M6.76 4.84l-1.8-1.79L3.17 4.84l1.79 1.8 1.8-1.8zM1 13h3v-2H1v2zm10 9h2v-3h-2v3zM17.24 4.84l1.79-1.8 1.79 1.8-1.8 1.79-1.78-1.79zM20 11v2h3v-2h-3zM12 5a7 7 0 100 14 7 7 0 000-14z"/>';
+        }
+
+        if (animate) {
+          try {
+            appRoot.classList.add('theme-anim');
+            setTimeout(()=> appRoot.classList.remove('theme-anim'), 420);
+          } catch(e){}
+        }
+      } catch(e){}
+    }
+    function setTheme(theme){
+      applyTheme(theme, true);
+      try { localStorage.setItem(THEME_KEY, theme); } catch(e){}
+    }
+    function toggleTheme(){
+      const isDark = document.body.classList.contains('dark');
+      setTheme(isDark ? 'light' : 'dark');
+    }
+    // init theme on load: prefer saved, else system preference
+    try {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === 'dark' || saved === 'light') applyTheme(saved, false);
+      else {
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        applyTheme(prefersDark ? 'dark' : 'light', false);
+      }
+    } catch(e){ applyTheme('light', false); }
+
+    themeToggle.addEventListener('click', toggleTheme);
+
+    // -------------------------
+    // chat autoscroll improvements
+    // -------------------------
+    let isUserNearBottom = true;
+    function updateIsNearBottom(){
+      const el = messages;
+      const threshold = 72; // px from bottom considered "near bottom"
+      if (!el) return true;
+      const atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) <= threshold;
+      isUserNearBottom = atBottom;
+      if (atBottom) {
+        NEW_MESSAGE_BTN.style.display = 'none';
+      }
+      return atBottom;
+    }
+    NEW_MESSAGE_BTN.addEventListener('click', ()=> {
+      messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
+      NEW_MESSAGE_BTN.style.display = 'none';
+      isUserNearBottom = true;
+    });
+    messages.addEventListener('scroll', ()=> {
+      const atBottom = updateIsNearBottom();
+      if (atBottom) NEW_MESSAGE_BTN.style.display = 'none';
+    });
+
+    function fmtTime(s){
+      if (!isFinite(s) || s === undefined || s === null) return '0:00';
+      s = Math.floor(s);
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      return m + ':' + (sec < 10 ? '0' + sec : sec);
+    }
+
+    function showControlsTemporarily(){
+      if (!controlsOverlay) return;
+      if (!video.src && !isYouTube) return;
+      controlsOverlay.classList.add('visible');
+      controlsOverlay.setAttribute('aria-hidden','false');
+      clearTimeout(idleTimeout);
+      idleTimeout = setTimeout(()=>{
+        if ((!video.paused && video.readyState > 0) || isYouTube) {
+          controlsOverlay.classList.remove('visible');
+          controlsOverlay.setAttribute('aria-hidden','true');
+        }
+      }, 2200);
+    }
+
+    function hideControlsNow(){
+      if (!controlsOverlay) return;
+      controlsOverlay.classList.remove('visible');
+      controlsOverlay.setAttribute('aria-hidden','true');
+    }
+
+    // helper: whether media is actively playing
+    function isMediaPlaying() {
+      try {
+        if (isYouTube && ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
+          const st = ytPlayer.getPlayerState();
+          return st === 1; // YT.PlayerState.PLAYING
+        } else if (video) {
+          return !video.paused && !video.ended && video.readyState > 2;
+        }
+      } catch(e){}
+      return false;
+    }
+
+    // centraliza visibilidade do botão 'Mudar vídeo'
+    function showChangeBtn(forceShow = false) {
+      if (!changeVideoBtn) return;
+      // Show when:
+      //  - explicitly requested (changeMode true), OR
+      //  - there is any video loaded (youtube OR video.src), OR
+      //  - forceShow param true (explicit caller)
+      const hasVideoLoaded = (isYouTube === true) || (video && typeof video.src === 'string' && video.src.trim() !== '');
+      const shouldShow = changeMode === true || hasVideoLoaded || forceShow;
+      if (shouldShow) {
+        changeVideoBtn.style.display = 'inline-flex';
+        // brief pulse if we just made it visible and not in confirm mode
+        if (!changeVideoBtn.classList.contains('pulse') && !changeMode) {
+          changeVideoBtn.classList.add('pulse');
+          setTimeout(()=> changeVideoBtn.classList.remove('pulse'), 2500);
+        }
+      } else {
+        changeVideoBtn.style.display = 'none';
+        changeVideoBtn.classList.remove('pulse');
+      }
+    }
+
+    function enterConfirmMode() {
+      changeMode = true;
+      changeVideoBtn.textContent = 'Enviar vídeo';
+      changeVideoBtn.classList.add('primary');
+      showChangeBtn(true); // force visible while confirming
+    }
+    function exitConfirmMode() {
+      changeMode = false;
+      pendingFile = null;
+      pendingYouTube = null;
+      changeVideoBtn.textContent = 'Mudar Video';
+      changeVideoBtn.classList.remove('primary');
+      // show only if video present
+      showChangeBtn(true);
+      uploadStatus.textContent = '';
+    }
+
+    function fmtSize(bytes){
+      if (!bytes) return '0 B';
+      const units = ['B','KB','MB','GB'];
+      let i=0; let v=bytes;
+      while(v>=1024 && i<units.length-1){ v/=1024; i++; }
+      return v.toFixed(i===0?0:2) + ' ' + units[i];
+    }
+
+    // -------------------------
+    // setVideo ...
+    // -------------------------
+    function setVideo(src){
+      clearYouTubePlayerInterval();
+
+      let videoUrl = null;
+      qualitiesMap = null;
+      originalSrc = null;
+
+      function cleanupVideoElement(){
+        try { video.pause(); } catch(e){}
+        try { video.removeAttribute('src'); video.load(); } catch(e){}
+        video.style.display = 'none';
+      }
+
+      function cleanupYouTubeElement(){
+        if (ytPlayer && typeof ytPlayer.destroy === 'function') {
+          try { ytPlayer.stopVideo(); } catch(e){}
+          try { ytPlayer.destroy(); } catch(e){}
+        }
+        ytPlayer = null;
+        isYouTube = false;
+        ytContainer.style.display = 'none';
+        try { uploadStatus.innerHTML = ''; } catch(e){}
+      }
+
+      if (!src) {
+        cleanupVideoElement();
+        cleanupYouTubeElement();
+        placeholder.style.display = 'flex';
+        hideControlsNow();
+        if (qualityControl) { qualityControl.hidden = true; qualityControl.setAttribute('aria-hidden','true'); }
+        qualityLabel.textContent = 'Qualidade: -';
+        showChangeBtn(false);
+        return;
+      }
+
+      if (typeof src === 'object' && src !== null && src.youtube) {
+        const id = src.youtube;
+        originalSrc = 'youtube:' + id;
+        cleanupVideoElement();
+        cleanupYouTubeElement();
+        openYouTubePlayer(id);
+        qualityLabel.textContent = 'Qualidade: YouTube';
+        placeholder.style.display = 'none';
+        // ensure change button visible whenever a video is set
+        setTimeout(()=> showChangeBtn(true), 150);
+        return;
+      }
+
+      if (typeof src === 'object' && src !== null && src.video) {
+        videoUrl = src.video;
+        if (src.qualities && typeof src.qualities === 'object') {
+          qualitiesMap = src.qualities;
+        }
+      } else if (typeof src === 'string') {
+        videoUrl = src;
+      } else {
+        console.warn('setVideo: formato de src inesperado', src);
+        return;
+      }
+
+      originalSrc = videoUrl;
+
+      if (qualitiesMap && !qualitiesMap['original']) {
+        qualitiesMap = Object.assign({ original: originalSrc }, qualitiesMap);
+        currentQuality = 'original';
+      } else if (!qualitiesMap) {
+        qualitiesMap = {
+          'Auto': originalSrc,
+          '1080p': originalSrc,
+          '720p': originalSrc,
+          '480p': originalSrc,
+          '360p': originalSrc,
+          'original': originalSrc
+        };
+        currentQuality = 'Auto';
+      }
+
+      if (ytPlayer && typeof ytPlayer.destroy === 'function') {
+        try { ytPlayer.destroy(); } catch(e){}
+      }
+      isYouTube = false;
+      ytContainer.style.display = 'none';
+
+      const onReady = () => {
+        try { video.removeEventListener('loadedmetadata', onReady); } catch(e){}
+        try { video.removeEventListener('canplay', onReady); } catch(e){}
+        video.style.display = 'block';
+        placeholder.style.display = 'none';
+        showControlsTemporarily();
+        updatePlayPauseUI();
+        // ensure change button visible whenever a video is set
+        setTimeout(()=> showChangeBtn(true), 120);
+      };
+
+      video.src = originalSrc;
+      try { video.load(); } catch(e){}
+      video.addEventListener('loadedmetadata', onReady, { once: true });
+      video.addEventListener('canplay', onReady, { once: true });
+
+      if (qualityControl) {
+        qualityControl.hidden = false;
+        qualityControl.setAttribute('aria-hidden','false');
+        populateQualityMenu();
+      }
+      qualityLabel.textContent = 'Qualidade: ' + currentQuality;
+
+      showChangeBtn(true);
+    }
+
+    function populateQualityMenu(){
+      while (qualityMenu.firstChild) qualityMenu.removeChild(qualityMenu.firstChild);
+
+           const preferredOrder = ['Auto','1080p','720p','480p','360p','original'];
+      const keys = Object.keys(qualitiesMap || {});
+      const ordered = preferredOrder.filter(k => keys.includes(k)).concat(keys.filter(k => !preferredOrder.includes(k)));
+
+      ordered.forEach((k) => {
+        const btn = document.createElement('button');
+        btn.className = 'qc-item' + (k === currentQuality ? ' selected' : '');
+        btn.setAttribute('role','menuitem');
+        btn.dataset.quality = k;
+        btn.textContent = k;
+        const check = document.createElement('span');
+        check.className = 'qc-check';
+        btn.appendChild(check);
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          changeQuality(k);
+          closeQualityMenu();
+        });
+        qualityMenu.appendChild(btn);
+      });
+    }
+
+    function changeQuality(key){
+      if (!originalSrc) return;
+      if (key === currentQuality) return;
+
+      let newSrc = (qualitiesMap && qualitiesMap[key]) ? qualitiesMap[key] : originalSrc;
+
+      const wasPlaying = !video.paused && !video.ended;
+      const currentTime = video.currentTime || 0;
+
+      try { video.pause(); } catch(e){}
+      video.src = newSrc;
+      try { video.load(); } catch(e){}
+      const resume = () => {
+        try { video.currentTime = Math.min(currentTime, (video.duration || currentTime)); } catch(e){}
+        if (wasPlaying) {
+          const p = video.play();
+          if (p && p.then) p.catch(()=>{});
+        }
+        updatePlayPauseUI();
+        video.removeEventListener('loadedmetadata', resume);
+      };
+      video.addEventListener('loadedmetadata', resume);
+
+      currentQuality = key;
+      qualityLabel.textContent = 'Qualidade: ' + key;
+      Array.from(qualityMenu.children).forEach(it => {
+        it.classList.toggle('selected', it.dataset.quality === key);
+      });
+    }
+
+    // menu open/close
+    function openQualityMenu(){
+      qualityMenu.classList.add('visible');
+      qualityBtn.setAttribute('aria-expanded', 'true');
+      qualityMenu.setAttribute('aria-hidden','false');
+      const first = qualityMenu.querySelector('.qc-item');
+      if (first) first.focus();
+      document.addEventListener('click', onDocClickCloseQuality);
+      document.addEventListener('keydown', onDocKeyCloseQuality);
+    }
+    function closeQualityMenu(){
+      qualityMenu.classList.remove('visible');
+      qualityBtn.setAttribute('aria-expanded', 'false');
+      qualityMenu.setAttribute('aria-hidden','true');
+      document.removeEventListener('click', onDocClickCloseQuality);
+      document.removeEventListener('keydown', onDocKeyCloseQuality);
+    }
+    function toggleQualityMenu(e){
+      e.stopPropagation();
+      if (qualityMenu.classList.contains('visible')) closeQualityMenu();
+      else openQualityMenu();
+    }
+    function onDocClickCloseQuality(e){
+      if (!qualityControl.contains(e.target)) closeQualityMenu();
+    }
+    function onDocKeyCloseQuality(e){
+      if (e.key === 'Escape') closeQualityMenu();
+    }  // memorize esse codigo e espere a segunda parte pra memorizwar tbm
+
+// --- Play/Pause UI + controls (part 2 content) ---
+    function updatePlayPauseUI(){
+      if (isYouTube) {
+        try {
+          const st = ytPlayer && typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : null;
+          if (st === 1) {
+            ctlPlay.style.display = 'none';
+            ctlPause.style.display = 'block';
+          } else {
+            ctlPlay.style.display = 'block';
+            ctlPause.style.display = 'none';
+          }
+        } catch (e) {
+          ctlPlay.style.display = 'block';
+          ctlPause.style.display = 'none';
+        }
+      } else {
+        if (video.paused || video.ended){
+          ctlPlay.style.display = 'block';
+          ctlPause.style.display = 'none';
+        } else {
+          ctlPlay.style.display = 'none';
+          ctlPause.style.display = 'block';
+        }
+      }
+      // ensure change button visible when a video exists (do not hide on pause/end)
+      showChangeBtn(true);
+    }
+
+    async function togglePlay(){
+      if (isYouTube) {
+        if (!ytPlayer) return;
+        const st = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+        if (st === 1) {
+          ytPlayer.pauseVideo();
+          sendControl(false);
+        } else {
+          ytPlayer.playVideo();
+          sendControl(true);
+        }
+        updatePlayPauseUI();
+        showControlsTemporarily();
+        return;
+      }
+
+      if (video.paused || video.ended) {
+        const p = video.play();
+        if (p && p.then) p.catch(()=>{});
+      } else {
+        video.pause();
+      }
+      updatePlayPauseUI();
+      showControlsTemporarily();
+    }
+
+    playBtn.addEventListener('click', (e)=>{ togglePlay(); e.stopPropagation(); });
+    backBtn.addEventListener('click', (e)=> {
+      if (isYouTube && ytPlayer) {
+        const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
+        ytPlayer.seekTo(Math.max(0, cur - 10), true);
+      } else {
+        video.currentTime = Math.max(0, video.currentTime - 10);
+      }
+      showControlsTemporarily(); e.stopPropagation();
+    });
+    forwardBtn.addEventListener('click', (e)=> {
+      if (isYouTube && ytPlayer) {
+        const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
+        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : cur;
+        ytPlayer.seekTo(Math.min(dur, cur + 10), true);
+      } else {
+        video.currentTime = Math.min((video.duration||0), video.currentTime + 10);
+      }
+      showControlsTemporarily(); e.stopPropagation();
+    });
+
+    // NOTE: removed the earlier top-level muteBtn listener to avoid double-binding/conflict.
+    // A single unified mute handler exists below (inside the reveal/app IIFE) and will be attached once.
+
+    fsBtn.addEventListener('click', (e) => {
+      const el = videoInner;
+      if (!document.fullscreenElement) {
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      }
+      showControlsTemporarily();
+      e.stopPropagation();
+    });
+
+    function updateProgressUI(){
+      if (isYouTube && ytPlayer) {
+        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
+        if (!isFinite(dur) || dur === 0) {
+          progressBar.style.width = '0%';
+          currentTimeEl.textContent = '0:00';
+          durationEl.textContent = fmtTime(dur || 0);
+          return;
+        }
+        const pct = (cur / dur) * 100;
+        progressBar.style.width = pct + '%';
+        currentTimeEl.textContent = fmtTime(cur);
+        durationEl.textContent = fmtTime(dur);
+        return;
+      }
+
+      if (!video || !isFinite(video.duration) || video.duration === 0) {
+        progressBar.style.width = '0%';
+        currentTimeEl.textContent = '0:00';
+        durationEl.textContent = fmtTime(video.duration || 0);
+        return;
+      }
+      const pct = (video.currentTime / video.duration) * 100;
+      progressBar.style.width = pct + '%';
+      currentTimeEl.textContent = fmtTime(video.currentTime);
+      durationEl.textContent = fmtTime(video.duration);
+    }
+
+    progress.addEventListener('click', (e)=>{
+      const rect = progress.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, x / rect.width));
+      if (isYouTube && ytPlayer) {
+        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        if (dur > 0) ytPlayer.seekTo(pct * dur, true);
+      } else {
+        if (isFinite(video.duration)) {
+          video.currentTime = pct * video.duration;
+        }
+      }
+      showControlsTemporarily();
+      e.stopPropagation();
+    });
+
+    // -------------------------
+    // YouTube API helpers (mantive fetch/meta helpers)
+    // -------------------------
+    function loadYouTubeAPI(){
+      return new Promise((resolve) => {
+        if (ytApiReady) return resolve();
+        if (window.YT && window.YT.Player) {
+          ytApiReady = true; return resolve();
+        }
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        tag.async = true;
+        document.head.appendChild(tag);
+        window.onYouTubeIframeAPIReady = function(){
+          ytApiReady = true;
+          resolve();
+        };
+        setTimeout(()=> {
+          if (!ytApiReady && window.YT && window.YT.Player) { ytApiReady = true; resolve(); }
+        }, 3000);
+      });
+    }
+
+    function showUnembeddableUI(id, code){
+      ytContainer.style.display = 'none';
+      placeholder.style.display = 'flex';
+      const link = `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+      const msg = document.createElement('div');
+      msg.style.color = '#fff';
+      msg.style.textAlign = 'center';
+      msg.innerHTML = `<div style="margin-bottom:8px">Este vídeo não permite incorporação (código ${code}).</div><a href="${link}" target="_blank" rel="noopener" style="background:#fff;color:#000;padding:8px 12px;border-radius:8px;text-decoration:none">Abrir no YouTube</a>`;
+      uploadStatus.innerHTML = '';
+      uploadStatus.appendChild(msg);
+      try { socket.emit('chat-message', { room, user: 'System', text: `Vídeo não incorporável: ${link}`, ts: Date.now() }); } catch(e){}
+    }
+
+    // openYouTubePlayer rebuilt (mantive lógica segura de origin + enablejsapi)
+    function openYouTubePlayer(id){
+      isYouTube = true;
+      clearYouTubePlayerInterval();
+      ytContainer.innerHTML = '';
+      if (ytPlayer && typeof ytPlayer.destroy === 'function') {
+        try { ytPlayer.destroy(); } catch(e){}
+      }
+      const iframeId = 'yt-e-player-iframe-' + Math.random().toString(36).slice(2,9);
+      const wrapper = document.createElement('div');
+      wrapper.style.width = '100%';
+      wrapper.style.height = '100%';
+      wrapper.id = 'yt-wrapper-' + iframeId;
+
+      const origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+      const src = 'https://www.youtube.com/embed/' + encodeURIComponent(id) +
+                  '?enablejsapi=1&controls=0&iv_load_policy=3&rel=0&modestbranding=1&playsinline=1&autoplay=1&origin=' + encodeURIComponent(origin);
+
+      const iframe = document.createElement('iframe');
+      iframe.id = iframeId;
+      iframe.width = '100%';
+      iframe.height = '100%';
+      iframe.frameBorder = '0';
+      iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+      iframe.allowFullscreen = true;
+      iframe.src = src;
+      iframe.style.border = '0';
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+
+      try { iframe.style.pointerEvents = 'none'; } catch (e) { /* ignore */ }
+
+      wrapper.appendChild(iframe);
+      ytContainer.appendChild(wrapper);
+      ytContainer.style.display = 'block';
+      placeholder.style.display = 'none';
+      video.style.display = 'none';
+
+      loadYouTubeAPI().then(()=> {
+        try {
+          ytPlayer = new YT.Player(iframeId, {
+            videoId: id,
+            playerVars: {
+              controls: 0,
+              modestbranding: 1,
+              rel: 0,
+              playsinline: 1,
+              disablekb: 1,
+              autoplay: 1,
+              iv_load_policy: 3,
+              origin: origin
+            },
+            events: {
+              onReady: (e) => {
+                try {
+                  const f = document.getElementById(iframeId);
+                  if (f) f.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
+                } catch(e){}
+                try { e.target.playVideo(); } catch(e){}
+                updatePlayPauseUI();
+                startYouTubePoll();
+                qualityLabel.textContent = 'Qualidade: YouTube';
+                try { uploadStatus.innerHTML = ''; } catch(e){}
+              },
+              onStateChange: (e) => {
+                updatePlayPauseUI();
+                if (isHost) {
+                  const playing = (e.data === YT.PlayerState.PLAYING);
+                  sendControl(playing);
+                }
+              },
+              onError: (e) => {
+                console.warn('YT onError', e.data);
+                if (e.data === 101 || e.data === 150) {
+                  showUnembeddableUI(id, e.data);
+                } else {
+                  if (uploadStatus) uploadStatus.textContent = 'Vídeo indisponível (código ' + e.data + ').';
+                  try { e.target.destroy && e.target.destroy(); } catch(_){ }
+                  ytPlayer = null;
+                  isYouTube = false;
+                  ytContainer.style.display = 'none';
+                  placeholder.style.display = 'flex';
+                  qualityLabel.textContent = 'Qualidade: -';
+                }
+              }
+            }
+          });
+        } catch (err) {
+          console.warn('Erro criando YT.Player', err);
+          if (uploadStatus) uploadStatus.textContent = 'Falha ao criar o player do YouTube.';
+          ytContainer.style.display = 'none';
+          placeholder.style.display = 'flex';
+          isYouTube = false;
+        }
+      }).catch(err=>{
+        console.warn('YT API load failed', err);
+        if (uploadStatus) uploadStatus.textContent = 'Falha ao carregar o player do YouTube.';
+        ytContainer.style.display = 'none';
+        placeholder.style.display = 'flex';
+      });
+    }
+
+    function startYouTubePoll(){
+      clearYouTubePlayerInterval();
+      ytPollInterval = setInterval(()=> {
+        if (!ytPlayer) return;
+        try { updateProgressUI(); } catch(e){}
+      }, 250);
+    }
+    function clearYouTubePlayerInterval(){
+      if (ytPollInterval) { clearInterval(ytPollInterval); ytPollInterval = null; }
+    }
+
+    // -------------------------
+    // sync emit
+    // -------------------------
+    function sendControl(playing){
+      if (!room) return;
+      if (syncing) return;
+      let time = 0;
+      if (isYouTube && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+        time = ytPlayer.getCurrentTime();
+      } else {
+        time = video.currentTime || 0;
+      }
+      const payload = { room, time: time, playing: !!playing, ts: nowMs() };
+      safeEmit('control', payload);
+    }
+
+    // -------------------------
+    // chat & socket handlers
+    // -------------------------
+    socket.on('connect', () => {
+      logStatus('Conectado');
+      console.log('socket conectado', socket.id);
+      try { socket.emit('list-rooms'); } catch(e){}
+    });
+
+    // handle server-provided room list (if server supports it)
+    let lobbyRooms = []; // { name, count, hasPassword }
+
+    // antes: function normalizeRoom(r) { ... return { name: name, count: Number(r.count || 0), hasPassword: !!r.hasPassword }; }
+
+function normalizeRoom(r){
+  if (!r) return { name: '', count: 0, hasPassword: false };
+  if (typeof r === 'string') return { name: r, count: 0, hasPassword: false };
+
+  if (typeof r === 'object') {
+    const name =
+      (typeof r.name === 'string' && r.name.trim()) ? r.name.trim()
+      : (typeof r.room === 'string' && r.room.trim()) ? r.room.trim()
+      : (typeof r.title === 'string' && r.title.trim()) ? r.title.trim()
+      : String(r.name || r.room || r.id || '');
+
+    const count = Number(
+      (typeof r.count !== 'undefined' ? r.count :
+       (typeof r.users !== 'undefined' ? r.users :
+        (typeof r.usersCount !== 'undefined' ? r.usersCount : 0)))
+    ) || 0;
+
+    // preserve original object for later inspection
+    const raw = r;
+
+    // attempt to detect youtube id in several possible shapes
+    let youtube = null;
+    if (typeof r.youtube === 'string' && /^[A-Za-z0-9_-]{11}$/.test(r.youtube)) youtube = r.youtube;
+    else if (r.video && typeof r.video === 'object' && typeof r.video.youtube === 'string' && /^[A-Za-z0-9_-]{11}$/.test(r.video.youtube)) youtube = r.video.youtube;
+    else if (typeof r.video === 'string' && /^[A-Za-z0-9_-]{11}$/.test(r.video)) youtube = r.video;
+    else if (r.raw && r.raw.youtube && typeof r.raw.youtube === 'string' && /^[A-Za-z0-9_-]{11}$/.test(r.raw.youtube)) youtube = r.raw.youtube;
+
+    // keep possible video metadata (could be string url, object with thumb, etc.)
+    const video = r.video || r.media || r.videoInfo || null;
+
+    return { name: name, count: count, hasPassword: !!r.hasPassword, raw: raw, video: video, youtube: youtube };
+  }
+
+  return { name: String(r), count:0, hasPassword:false };
+}
+
+    function renderRooms(filter='') {
+  roomsContainer.innerHTML = '';
+  const q = String(filter || '').trim().toLowerCase();
+
+  // ensure lobbyRooms entries are normalized objects
+  lobbyRooms = (lobbyRooms || []).map(normalizeRoom);
+
+  // helper para detectar "minha sala"
+  function isMyRoom(r) {
+    if (!r) return false;
+    // tenta vários campos possíveis de owner
+    const owner = r.owner || r.host || r.ownerId || (r.raw && r.raw.owner) || '';
+    // checks: socket id, username, or current room name
+    try {
+      if (typeof mySocketId !== 'undefined' && mySocketId && String(owner) === String(mySocketId)) return true;
+      if (typeof myUser !== 'undefined' && myUser && String(owner) === String(myUser)) return true;
+      if (typeof room !== 'undefined' && room && String(r.name) === String(room)) return true;
+    } catch (e) { /* ignore */ }
+    return false;
+  }
+
+  // filtra primeiro pelo texto
+  const list = lobbyRooms.filter(r => !q || (r.name && r.name.toLowerCase().includes(q)));
+
+  // ordena: minhas salas primeiro, depois por nome
+  list.sort((a,b) => {
+    const aMine = isMyRoom(a);
+    const bMine = isMyRoom(b);
+    if (aMine && !bMine) return -1;
+    if (!aMine && bMine) return 1;
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+
+  if (!list.length) {
+    lobbyEmptyNote.style.display = 'block';
+  } else {
+    lobbyEmptyNote.style.display = 'none';
+  }
+
+  list.forEach(r => {
+
+    const card = document.createElement('div');
+  card.className = 'room-card';
+
+  // --- THUMBNAIL ---
+  const thumbWrap = document.createElement('div');
+  thumbWrap.className = 'room-thumb';
+
+  const thumbImg = document.createElement('img');
+  thumbImg.alt = `Thumbnail da sala ${String(r.name || '')}`;
+
+  // inline fallback SVG (data URL) — simples e leve
+  const defaultThumb = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+       <rect width="100%" height="100%" fill="#F3F4F6"/>
+       <g transform="translate(320 180)" fill="#D1D5DB" font-family="sans-serif" text-anchor="middle">
+         <circle r="46" fill="#E5E7EB"/>
+         <path d="M-12 -18 L18 0 L-12 18 z" fill="#9CA3AF"/>
+       </g>
+     </svg>`
+  );
+
+  // helper to set fallback in a chain
+  function setDefaultThumb(imgEl){ imgEl.onerror = null; imgEl.src = defaultThumb; }
+
+  if (r && r.youtube) {
+    // try high-res first, fallback to hqdefault, then default SVG
+    thumbImg.src = `https://i.ytimg.com/vi/${r.youtube}/maxresdefault.jpg`;
+    thumbImg.onerror = function(){
+      this.onerror = null;
+      this.src = `https://i.ytimg.com/vi/${r.youtube}/hqdefault.jpg`;
+      // second fallback to defaultThumb if hqdefault fail
+      this.onerror = function(){ setDefaultThumb(this); };
+    };
+  } else if (r && r.video && typeof r.video === 'object' && (r.video.thumbnail || r.video.thumb)) {
+    thumbImg.src = r.video.thumbnail || r.video.thumb;
+    thumbImg.onerror = function(){ setDefaultThumb(this); };
+  } else if (r && typeof r.video === 'string' && r.video.indexOf('http') === 0) {
+    // if server sent a video string that is actually a URL to a hosted thumb, try it
+    thumbImg.src = r.video;
+    thumbImg.onerror = function(){ setDefaultThumb(this); };
+  } else {
+    // no video info -> default
+    thumbImg.src = defaultThumb;
+  }
+
+  thumbWrap.appendChild(thumbImg);
+  card.appendChild(thumbWrap);
+
+  
+
+// --- NAME / META / ACTIONS ---
+const mine = isHost && r.name === room;
+const inRoom = r.name === room;
+
+const name = document.createElement('div');
+name.className = 'room-name';
+name.textContent = mine ? 'Sua sala' : String(r.name || '—');
+
+const meta = document.createElement('div');
+meta.className = 'room-meta';
+
+const usersCount = Number(r.count || r.users || 0);
+
+if (mine) {
+  meta.innerHTML = `<span class="lock">${r.hasPassword ? '🔒' : '🔓'}</span><span>Você • ${usersCount} ${usersCount === 1 ? 'pessoa' : 'pessoas'}</span>`;
+} else {
+  meta.innerHTML = `<span class="lock">${r.hasPassword ? '🔒' : '🔓'}</span><span>${usersCount} ${usersCount === 1 ? 'pessoa' : 'pessoas'} assistindo</span>`;
+}
+
+const actions = document.createElement('div');
+actions.className = 'room-actions';
+
+if (mine) {
+
+  const label = document.createElement('span');
+  label.className = 'room-label-self';
+ 
+  actions.appendChild(label);
+
+} else if (!inRoom) {
+
+  const joinBtnLocal = document.createElement('button');
+  joinBtnLocal.className = 'btn primary';
+  joinBtnLocal.textContent = 'Entrar';
+
+  joinBtnLocal.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openJoinForRoom(r);
+  });
+
+  actions.appendChild(joinBtnLocal);
+
+}
+    card.appendChild(name);
+    card.appendChild(meta);
+    card.appendChild(actions);
+    roomsContainer.appendChild(card);
+  });
+
+  const stats = `Salas: ${lobbyRooms.length} • Filtradas: ${list.length}`;
+  if (lobbyStats) lobbyStats.textContent = stats;
+}
+
+    function addOrUpdateRoom(r){
+      const roomObj = normalizeRoom(r);
+      const idx = lobbyRooms.findIndex(x => x.name === roomObj.name);
+      if (idx >= 0) lobbyRooms[idx] = roomObj;
+      else lobbyRooms.unshift(roomObj);
+      renderRooms(lobbySearch.value);
+    }
+    function removeRoomByName(n){
+      const nameStr = String(n || '').trim();
+      lobbyRooms = lobbyRooms.filter(x => x.name !== nameStr);
+      renderRooms(lobbySearch.value);
+    }
+
+    // server events to maintain lobby (if implemented server-side)
+    socket.on('room-list', (list) => {
+      if (!Array.isArray(list)) return;
+      lobbyRooms = list.map(it => normalizeRoom(it));
+      renderRooms(lobbySearch.value);
+    });
+    socket.on('room-created', (r) => {
+      if (!r) return;
+      addOrUpdateRoom(r);
+    });
+
+    // atualiza quando servidor emite uma sala atualizada
+socket.on('room-updated', (r) => {
+  if (!r) return;
+  addOrUpdateRoom(r);
+});
+
+socket.on('room-list', (list) => {
+  if (!Array.isArray(list)) return;
+  // atualiza o lobby normalmente
+  lobbyRooms = list.map(it => normalizeRoom(it));
+  renderRooms(lobbySearch.value || '');
+
+  // Se estou numa sala, atualiza o contador da sala com os dados que vieram no list-rooms
+  try {
+    const cur = (list || []).find(i => i && (i.name === room || i.room === room));
+    const users = Number(cur && (cur.users ?? cur.count ?? 0)) || 0;
+    if (roomCount) roomCount.textContent = `${users} ${users === 1 ? 'pessoa' : 'pessoas'} assistindo`;
+    console.log('[debug] room-list recebido — sala atual:', room, 'users:', users, cur);
+  } catch (err) {
+    console.warn('[debug] falha ao atualizar roomCount pelo room-list', err);
+  }
+});
+
+    // server video handlers
+    socket.on('video-ready', (src) => {
+      setVideo(src);
+      logStatus('Vídeo disponível');
+    });
+    socket.on('youtube', (data) => {
+      if (data && (data.id || data.youtube)) setVideo({ youtube: data.id || data.youtube });
+    });
+
+    socket.on('chat-history', hist => { messages.innerHTML=''; if (Array.isArray(hist)) hist.forEach(m=> appendMessage(m)); });
+
+    // improved appendMessage: respects user scroll position and avoids [object Object]
+    function escapeHtml(s){ if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function formatTime(ts){ const d = new Date(ts); return d.toLocaleTimeString(); }
+
+    function appendMessage(msg){
+      try {
+        const atBottomBefore = updateIsNearBottom();
+
+        const user = (msg && (typeof msg.user === 'string' || typeof msg.user === 'number')) ? String(msg.user) :
+                     (msg && msg.user && typeof msg.user === 'object') ? (msg.user.name || JSON.stringify(msg.user)) : 'System';
+        const text = (msg && (typeof msg.text === 'string' || typeof msg.text === 'number')) ? String(msg.text) :
+                     (msg && msg.text && typeof msg.text === 'object') ? JSON.stringify(msg.text) : '';
+        const ts = (msg && msg.ts) ? msg.ts : Date.now();
+
+        const el = document.createElement('div'); el.className = 'msg' + (user === nickname ? ' mine' : '');
+        el.innerHTML = `<strong style="font-size:12px">${escapeHtml(user)}</strong><div style="margin-top:6px">${escapeHtml(text)}</div><div style="font-size:11px;color:#999;margin-top:6px">${formatTime(ts)}</div>`;
+        messages.appendChild(el);
+
+        if (atBottomBefore) {
+          messages.scrollTop = messages.scrollHeight;
+          NEW_MESSAGE_BTN.style.display = 'none';
+          isUserNearBottom = true;
+        } else {
+          NEW_MESSAGE_BTN.style.display = 'inline-flex';
+          isUserNearBottom = false;
+        }
+      } catch(e) {
+        console.error('appendMessage error', e);
+      }
+    }
+
+    socket.on('chat-message', msg => appendMessage(msg));
+    socket.on('chat-cleared', ()=> messages.innerHTML='');
+    socket.on('chat-error', e => alert(e?.error || 'Erro no chat'));
+
+    socket.on('sync', (payload) => {
+      if (!payload || typeof payload.ts !== 'number') return;
+      if (payload.ts <= lastAppliedTs) return;
+      lastAppliedTs = payload.ts;
+      syncing = true;
+      try {
+        if (isYouTube && ytPlayer) {
+          const localTime = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
+          if (Math.abs(localTime - payload.time) > SEEK_THRESHOLD) {try { ytPlayer.seekTo(payload.time, true); } catch(e){} }
+          if (payload.playing) { try { ytPlayer.playVideo(); } catch(e){} } else { try { ytPlayer.pauseVideo(); } catch(e){} }
+          syncing = false;
+        } else {
+          if (Math.abs(video.currentTime - payload.time) > SEEK_THRESHOLD) {
+            try { video.currentTime = payload.time; } catch(e){}
+          }
+          if (payload.playing) {
+            const p = video.play();
+            if (p && p.then) p.then(()=> syncing=false).catch(()=> syncing=false);
+            else syncing=false;
+          } else {
+            try { video.pause(); } catch(e){}
+            syncing=false;
+          }
+        }
+      } catch(e) { console.error(e); syncing=false; }
+    });
+
+    // ===== Lobby controls =====
+    openLobbyBtn.addEventListener('click', () => {
+      lobbyOverlay.style.display = 'flex';
+      lobbyOverlay.setAttribute('aria-hidden','false');
+      try { socket.emit('list-rooms'); } catch(e){}
+      // when opening lobby, if user is in-room ensure return button is visible
+      try {
+        if (window.__sync_in_room && returnToRoomBtn) {
+          returnToRoomBtn.style.display = 'inline-flex';
+          // keep it inline near the create button (do not force fixed)
+          returnToRoomBtn.classList.remove('return-fixed');
+        }
+        // ensure fechar button visibility depends on in-room
+        if (window.__sync_in_room && fecharBtn) {
+          fecharBtn.style.display = 'inline-flex';
+        } else if (fecharBtn) {
+          fecharBtn.style.display = 'none';
+        }
+      } catch(e){}
+    });
+
+    // NEW: returnToRoomBtn closes lobby and returns to room view
+    if (returnToRoomBtn) {
+      returnToRoomBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        try {
+          lobbyOverlay.style.display = 'none';
+          lobbyOverlay.setAttribute('aria-hidden','true');
+          // keep button visible when user is in-room (we want it accessible)
+          if (window.__sync_in_room) {
+            // ensure it's visible inline (not fixed) by default
+            returnToRoomBtn.style.display = 'inline-flex';
+            returnToRoomBtn.classList.remove('return-fixed');
+          } else {
+            // if not in room, hide
+            returnToRoomBtn.style.display = 'none';
+            returnToRoomBtn.classList.remove('return-fixed');
+          }
+        } catch(e){}
+      });
+    }
+
+    // NEW: fecharBtn closes lobby overlay; only visible when user is in-room (set elsewhere)
+    if (fecharBtn) {
+      fecharBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        try {
+          lobbyOverlay.style.display = 'none';
+          lobbyOverlay.setAttribute('aria-hidden','true');
+          // fecharBtn remains visible while the user stays in-room (per requirement)
+        } catch(e){}
+      });
+    }
+
+    lobbySearch.addEventListener('input', (e) => {
+      renderRooms(lobbySearch.value);
+    });
+
+    // open create modal
+    openCreateBtn.addEventListener('click', () => {
+      createModal.style.display = 'flex';
+      createModal.classList.add('visible');
+      createModal.setAttribute('aria-hidden','false');
+      setTimeout(()=> createRoomName.focus(), 80);
+    });
+    createCancelBtn.addEventListener('click', () => {
+      createModal.classList.remove('visible');
+      createModal.setAttribute('aria-hidden','true');
+      createModal.style.display = 'none';
+    });
+
+    // Create confirm: create room with optional password and nickname, host enters immediately
+    createConfirmBtn.addEventListener('click', async () => {
+      const r = (createRoomName.value || '').trim();
+      const pw = (createRoomPass.value || '').trim();
+      const nick = (createRoomNick.value || '').trim();
+      if (!r) { alert('Digite o nome da sala'); createRoomName.focus(); return; }
+      const hostNick = nick ? nick.slice(0,40) : ('Host' + Math.floor(Math.random()*9000+1000));
+      room = r;
+      isHost = true;
+      nickname = hostNick;
+      roomTitle.textContent = 'Sala ' + room;
+      logStatus('Você é host — enviando criação de sala...');
+      uploadAreaShow(true);
+      createModal.classList.remove('visible'); createModal.style.display='none';
+      lobbyOverlay.style.display = 'none'; lobbyOverlay.setAttribute('aria-hidden','true');
+
+      // Reveal player/chat now that user created/entered a room
+      revealAppForRoom();
+
+
+      // show the new return button (right of "Criar sala") and also make it fixed for persistent access
+      try {
+        if (returnToRoomBtn) {
+          returnToRoomBtn.style.display = 'inline-flex';
+          // make it fixed so user can always return to the room
+          returnToRoomBtn.classList.add('return-fixed');
+        }
+        // show fechar button next to create (per request)
+        if (fecharBtn) {
+          fecharBtn.style.display = 'inline-flex';
+        }
+      } catch(e){}
+
+      try {
+        socket.emit('create-room', { room, password: pw || null, host: nickname }, (ack) => {
+          if (ack && ack.ok) {
+            console.log('server ack create-room');
+          }
+        });
+      } catch (err) {
+        try { socket.emit('create-room', { room }); } catch(_){ console.warn('emit create-room fallback failed', _); }
+      }
+
+      try {
+        socket.emit('room-created', { name: room, count: 1, hasPassword: !!pw });
+      } catch(e){ /* ignore */ }
+      try { socket.emit('list-rooms'); } catch(e){}
+
+      addOrUpdateRoom({ name: room, count: 1, hasPassword: !!pw });
+    });
+
+    // Open join flow for a room object
+    let joinTargetRoom = null;
+    function openJoinForRoom(r){
+      const nr = normalizeRoom(r);
+      joinTargetRoom = nr;
+      joinRoomPass.value = '';
+      joinRoomNick.value = '';
+      joinModalSubtitle.textContent = `Entrar em ${nr.name}${nr.hasPassword ? ' — senha requerida' : ''}`;
+      joinModal.style.display = 'flex';
+      joinModal.classList.add('visible');
+      joinModal.setAttribute('aria-hidden','false');
+      setTimeout(()=> joinRoomNick.focus(), 100);
+    }
+    joinCancelBtn.addEventListener('click', () => {
+      joinModal.classList.remove('visible');
+      joinModal.setAttribute('aria-hidden','true');
+      joinModal.style.display = 'none';
+      joinTargetRoom = null;
+    });
+
+    joinConfirmBtn.addEventListener('click', () => {
+      if (!joinTargetRoom) return;
+      const pw = (joinRoomPass.value || '').trim();
+      const nick = (joinRoomNick.value || '').trim();
+      if (!nick) { alert('Digite seu apelido'); joinRoomNick.focus(); return; }
+
+      room = joinTargetRoom.name;
+      isHost = false;
+      nickname = nick.slice(0,40);
+      roomTitle.textContent = 'Sala ' + room;
+      logStatus('Entrando na sala...');
+      uploadAreaShow(false);
+
+      // show the new return button (right of "Criar sala") and make it fixed to persist
+      try {
+        if (returnToRoomBtn) {
+          returnToRoomBtn.style.display = 'inline-flex';
+          returnToRoomBtn.classList.add('return-fixed');
+        }
+        // show fechar button next to create (per request)
+        if (fecharBtn) {
+          fecharBtn.style.display = 'inline-flex';
+        }
+      } catch(e){}
+
+      try {
+        socket.emit('join-room', { room, password: pw || null, user: nickname }, (ack) => {
+
+  if (!ack || !ack.ok) {
+    alert(ack?.error || "❌ Senha incorreta");
+    return;
+  }
+
+  console.log('Entrou na sala');
+
+  joinModal.classList.remove('visible');
+  joinModal.style.display='none';
+
+  lobbyOverlay.style.display = 'none';
+  lobbyOverlay.setAttribute('aria-hidden','true');
+
+  revealAppForRoom();
+
+  socket.emit('room-joined', { name: room, user: nickname });
+  socket.emit('list-rooms');
+
+});
+      } catch (err) {
+        try { socket.emit('join-room', room); } catch(_){ console.warn('emit join-room fallback failed', _); }
+      }
+    });
+
+    try {
+      const hdr = document.getElementById('headerRoomControls');
+      if (hdr) hdr.style.display = 'none';
+    } catch(e){}
+
+    // upload area logic (kept)
+    function uploadAreaShow(show){
+      const ua = document.querySelector('.upload-area');
+      if(!ua) return;
+      ua.style.display = show ? 'flex' : 'none';
+      if (!show) {
+        fileInput.value = '';
+        uploadStatus.textContent = '';
+        uploadBtn.disabled = true;
+      }
+    }
+    uploadAreaShow(false);
+
+    // file input handler:
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files[0];
+      if (!f) {
+        uploadStatus.textContent = '';
+        uploadBtn.disabled = true;
+        if (changeMode) {
+          pendingFile = null;
+          uploadStatus.textContent = 'Nenhum arquivo selecionado.';
+        }
+        return;
+      }
+      const sizeMB = (f.size / (1024*1024));
+      uploadStatus.textContent = `${f.name} (${fmtSize(f.size)}) — pronto para envio`;
+      uploadBtn.disabled = false;
+
+      if (changeMode) {
+        pendingFile = f;
+        uploadStatus.textContent = `Arquivo selecionado: ${f.name} (${fmtSize(f.size)}). Clique em "Enviar (temporário)" para aplicar à sala ${room}.`;
+      }
+    });
+
+   // ==== Upload button (agora trata arquivos E YouTube pendentes) ====
+if (uploadBtn) {
+  uploadBtn.addEventListener('click', async () => {
+    // primeiro: se estivermos em modo "confirm" (changeMode) delegamos ao fluxo de mudança
+    try {
+      // ===== versão rápida: aplica o YouTube otimistically e emite para servidor =====
+      if (pendingYouTube && pendingYouTube.id) {
+        if (!room) { uploadStatus.textContent = 'Crie a sala primeiro.'; return; }
+
+        uploadStatus.textContent = 'Aplicando vídeo do YouTube localmente e notificando servidor...';
+        uploadBtn.disabled = true;
+
+        // aplica imediatamente no player local (experiência imediata)
+        try {
+          setVideo({ youtube: pendingYouTube.id });
+          logStatus('Aplicado localmente (optimistic).');
+        } catch(e) {
+          console.warn('setVideo optimistic failed', e);
+        }
+
+        // tenta notificar o servidor — não bloqueamos o usuário esperando callback
+        try {
+          // emite sem depender exclusivamente do callback; o servidor pode confirmar depois
+          socket.emit('youtube', { room, url: pendingYouTube.raw, id: pendingYouTube.id }, (resp) => {
+            if (resp && resp.ok) {
+              logStatus('Servidor confirmou mudança de vídeo.');
+              uploadStatus.textContent = 'Vídeo aplicado à sala (confirmado pelo servidor).';
+            } else if (resp && resp.error) {
+              console.warn('Servidor respondeu com erro ao adicionar YouTube:', resp.error);
+              uploadStatus.textContent = 'Aplicado localmente; servidor: ' + resp.error;
+            } else {
+              // sem resp ou sem confirmação — já aplicamos localmente
+              uploadStatus.textContent = 'Vídeo aplicado localmente (sem confirmação do servidor).';
+            }
+          });
+        } catch (emitErr) {
+          console.warn('emit youtube falhou', emitErr);
+          uploadStatus.textContent = 'Aplicado localmente (erro ao notificar servidor).';
+        }
+
+        // limpa estado de pending e atualiza UI
+        pendingYouTube = null;
+        pendingFile = null;
+        updateUploadBtnVisibility();
+        return;
+      }
+
+      // Caso 2: envio de arquivo local (fallback para comportamento anterior)
+      // tenta pegar primeiro pendingFile (se estiver usando changeMode) senão pega fileInput
+      const f = pendingFile || fileInput.files[0];
+      if (!f) {
+        alert('Nenhum vídeo selecionado. Escolha um arquivo (clicando no seletor) ou informe um YouTube antes de enviar.');
+        return;
+      }
+      if (!room) { alert('Crie a sala primeiro'); return; }
+
+      // prepara upload de arquivo
+      uploadBtn.disabled = true;
+      uploadStatus.textContent = 'Enviando...';
+      const fd = new FormData();
+      fd.append('video', f);
+      fd.append('room', room);
+
+      try {
+        // tenta rota específica da sala primeiro
+        let res = await fetch(`/upload/${encodeURIComponent(room)}`, { method:'POST', body: fd });
+        if (!res.ok) {
+          // fallback para rota /upload
+          console.warn('/upload/:room falhou', res.status);
+          res = await fetch('/upload', { method:'POST', body: fd });
+        }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const json = await res.json();
+
+        let payload;
+        if (typeof json === 'string') payload = { video: json };
+        else if (json && json.video) payload = json;
+        else if (json && typeof json === 'object') payload = json;
+        else throw new Error('Resposta inválida do servidor');
+
+        try {
+          if (payload.video) setVideo(payload);
+          else setVideo(payload);
+        } catch (e){ console.warn('setVideo fallback', e); }
+
+        uploadStatus.textContent = 'Upload concluído';
+        logStatus('Upload OK — vídeo disponível');
+
+        // limpa input / estado
+        fileInput.value = '';
+        pendingFile = null;
+        uploadBtn.disabled = true;
+
+        // notifica servidor (legacy)
+        try {
+          socket.emit('video-ready', { room, video: payload }, (ack) => {
+            if (ack && ack.ok) console.log('server ack video-ready');
+          });
+        } catch (err) {
+          try { socket.emit('video-ready', payload); } catch(_) { console.warn('emit video-ready falhou', _); }
+        }
+
+      } catch (err) {
+        console.error('Erro upload', err);
+        uploadStatus.textContent = 'Erro no upload';
+        alert('Erro no upload: ' + (err.message || err));
+        uploadBtn.disabled = false;
+      }
+    } catch (outerErr) {
+      console.error('uploadBtn handler error', outerErr);
+      uploadStatus.textContent = 'Erro interno';
+      uploadBtn.disabled = false;
+    }
+  });
+}
+
+uploadBtn.style.display = 'none'; //
+
+function updateUploadBtnVisibility() {
+  // mostra/enabled o botão se houver arquivo ou YouTube pendente
+  const hasPending = !!pendingFile || !!pendingYouTube;
+  if (!uploadBtn) return;
+  uploadBtn.style.display = hasPending ? 'inline-flex' : 'none';
+  // habilita o botão quando houver algo a enviar (arquivo OU youtube)
+  uploadBtn.disabled = !hasPending;
+}
+
+fileInput.addEventListener('change', () => {
+  const f = fileInput.files[0];
+  if (!f) {
+    pendingFile = null;
+    updateUploadBtnVisibility();
+    uploadStatus.textContent = '';
+    return;
+  }
+  pendingFile = f;
+  pendingYouTube = null; // garante que só um tipo de upload é ativo
+  uploadStatus.textContent = `Arquivo selecionado: ${f.name} (${fmtSize(f.size)})`;
+  updateUploadBtnVisibility();
+});
+
+// === Consolida handler do YouTube e remove listeners duplicados ===
+(function setupYoutubeButton() {
+  const ybtn = document.getElementById('youtubeBtn');
+  if (!ybtn) return;
+
+  // Remove listeners anteriores com clonagem (garante limpeza)
+  const clone = ybtn.cloneNode(true);
+  ybtn.parentNode.replaceChild(clone, ybtn);
+
+  // Use a referência ao clone daqui pra frente
+  const btn = clone;
+})();
+
+// -------------------------
+// YouTube simple flow (PROMPT, sem duplicatas)
+// -------------------------
+function extractYouTubeID(input){
+  if (!input) return null;
+  input = String(input).trim().replace(/[<>]/g,'');
+  const regex = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
+  const m = input.match(regex);
+  if (m && m[1]) return m[1];
+  if (/^[A-Za-z0-9_-]{11}$/.test(input)) return input;
+  try {
+    const q = (new URLSearchParams((input.split('?')[1]||''))).get('v');
+    if (q && /^[A-Za-z0-9_-]{11}$/.test(q)) return q;
+  } catch(e){}
+  return null;
+}
+
+// chamada cliente agora vai pro servidor em vez de usar YT_API_KEY no browser
+async function fetchYouTubeMeta(id) {
+  if (!id) throw new Error('id ausente');
+  const url = `/api/youtube?id=${encodeURIComponent(id)}`;
+  const res = await fetch(url, { method: 'GET' });
+  if (!res.ok) {
+    const txt = await res.text().catch(()=>String(res.status));
+    throw new Error('Erro no servidor ao buscar meta do YouTube: ' + txt);
+  }
+  const json = await res.json();
+  if (!json.ok || !json.meta) {
+    throw new Error('Meta inválida: ' + (json.error || 'sem dados'));
+  }
+
+  // json.meta já vem no formato retornado pelo servidor (fetchYouTubeMetaServer)
+  return json.meta;
+}
+
+   // === Consolida handler do YouTube e remove listeners duplicados ===
+(function setupYoutubeButton() {
+  const ybtn = document.getElementById('youtubeBtn');
+  if (!ybtn) return;
+
+  // Remove listeners anteriores com clonagem (garante limpeza)
+  const clone = ybtn.cloneNode(true);
+  ybtn.parentNode.replaceChild(clone, ybtn);
+
+  // Use a referência ao clone daqui pra frente
+  const btn = clone;
+
+  btn.addEventListener('click', async () => {
+    if (!room) return alert('Crie a sala primeiro');
+
+    // PROMPT: mesma mensagem do changeVideoBtn (inclui 11 caracteres)
+    const raw = prompt('Cole a URL do YouTube ou o ID (11 caracteres):');
+    if (!raw) {
+      pendingYouTube = null;
+      updateUploadBtnVisibility();
+      return;
+    }
+
+    const id = extractYouTubeID(raw);
+    if (!id) {
+      pendingYouTube = null;
+      updateUploadBtnVisibility();
+      if (uploadStatus) uploadStatus.textContent = 'ID inválido.';
+      return;
+    }
+
+    // indica validação
+    if (uploadStatus) uploadStatus.textContent = 'Validando vídeo...';
+
+    try {
+      // valida com seu endpoint servidor (/api/youtube) para não expor chave
+      const resp = await fetch(`/api/youtube?id=${encodeURIComponent(id)}`, { method: 'GET' });
+      if (!resp.ok) throw new Error('Erro na validação: ' + resp.status);
+      const json = await resp.json();
+      if (!json || !json.ok || !json.meta) throw new Error(json && json.error ? json.error : 'Resposta inválida');
+
+      // sucesso: armazena pendingYouTube (mantém até o upload)
+      pendingYouTube = { id, raw, meta: json.meta };
+      pendingFile = null;
+      if (uploadStatus) uploadStatus.textContent = `Pronto para enviar: ${raw}`;
+      updateUploadBtnVisibility();
+
+    } catch (err) {
+      console.error('youtube validate error', err);
+      pendingYouTube = null;
+      updateUploadBtnVisibility();
+      if (uploadStatus) uploadStatus.textContent = 'Falha ao validar vídeo: ' + (err.message || err);
+      alert('Falha ao validar vídeo: ' + (err.message || err));
+    }
+  });
+})();
+
+    // CHANGE VIDEO FLOW (new)
+    if (changeVideoBtn) {
+      changeVideoBtn.addEventListener('click', async (e) => {
+        if (!isHost) {
+          return alert('Apenas o host pode mudar o vídeo');
+        }
+
+        if (!changeMode) {
+          enterConfirmMode();
+
+          const wantYT = confirm('Deseja trocar por um vídeo do YouTube?\nOK = YouTube, Cancel = enviar um arquivo local.');
+          if (wantYT) {
+            if (!room) {
+              uploadStatus.textContent = 'Crie a sala primeiro.';
+              return;
+            }
+            const raw = prompt('Cole a URL do YouTube ou o ID (11 caracteres):');
+            if (!raw) {
+              pendingYouTube = null;
+              uploadStatus.textContent = 'Operação cancelada pelo usuário. Clique em "Enviar (temporário)" para aplicar (nenhum vídeo) ou feche.';
+              return;
+            }
+            const id = extractYouTubeID(raw);
+            if (!id) {
+              uploadStatus.textContent = 'ID inválido.';
+              pendingYouTube = null;
+              return;
+            }
+            pendingYouTube = { id, raw };
+            pendingFile = null;
+            uploadStatus.textContent = `Pronto: ${raw} — clique em "Enviar (temporário)" para aplicar o vídeo a sala ${room}.`;
+            return;
+          } else {
+            uploadAreaShow(true);
+            setTimeout(()=> {
+              try { fileInput.click(); } catch(err){ console.warn('Não foi possível abrir seletor de arquivos diretamente', err); uploadStatus.textContent = 'Selecione um arquivo manualmente.'; }
+            }, 140);
+            uploadStatus.textContent = 'Selecione um arquivo. Após escolher, clique em "Enviar (temporário)".';
+            return;
+          }
+        }
+        // --- substituir o bloco que tenta fetchYouTubeMeta(pendingYouTube.id) ---
+if (changeMode) {
+  if (pendingYouTube) {
+    uploadStatus.textContent = 'Enviando vídeo do YouTube...';
+    try {
+      // Em vez de buscar meta aqui no client, enviamos direto ao servidor
+      socket.emit('youtube', { room, url: pendingYouTube.raw, id: pendingYouTube.id }, (resp) => {
+        if (resp && resp.ok) {
+          // servidor validou e gravou meta — atualiza UI com confirmação do servidor
+          setVideo({ youtube: pendingYouTube.id });
+          logStatus('Vídeo do YouTube carregado (servidor confirmou)');
+        } else {
+          // servidor pode recusar (ex: id inválido, não embeddable, erro na API)
+          // ainda aplicamos localmente como fallback, mas mostra mensagem ao usuário
+          setVideo({ youtube: pendingYouTube.id });
+          logStatus('Vídeo do YouTube aplicado localmente; servidor não confirmou: ' + (resp && resp.error ? resp.error : 'sem resposta'));
+          if (resp && resp.error) uploadStatus.textContent = 'Servidor: ' + resp.error;
+        }
+        pendingYouTube = null;
+        exitConfirmMode();
+      });
+    } catch (err) {
+      console.warn('emit youtube falhou', err);
+      setVideo({ youtube: pendingYouTube.id });
+      logStatus('Vídeo do YouTube carregado (aplicado localmente)');
+      pendingYouTube = null;
+      exitConfirmMode();
+    }
+    return;
+  }
+  // ... restante do changeMode (upload de arquivo) ...
+
+
+          if (pendingFile) {
+            if (!room) { uploadStatus.textContent = 'Crie a sala primeiro.'; return; }
+            uploadStatus.textContent = 'Enviando arquivo para o servidor...';
+            const fd = new FormData();
+            fd.append('video', pendingFile);
+            fd.append('room', room);
+            try {
+              let res = await fetch(`/upload/${encodeURIComponent(room)}`, { method: 'POST', body: fd });
+              if (!res.ok) {
+                console.warn('/upload/:room falhou', res.status);
+                res = await fetch('/upload', { method:'POST', body: fd });
+              }
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              const json = await res.json();
+
+              let payload;
+              if (typeof json === 'string') payload = { video: json };
+              else if (json && json.video) payload = json;
+              else if (json && typeof json === 'object') payload = json;
+              else throw new Error('Resposta inválida do servidor');
+
+              try { if (payload.video) setVideo(payload); else setVideo(payload); } catch(e){ console.warn('setVideo fallback', e); }
+
+              uploadStatus.textContent = 'Upload concluído e enviado à sala.';
+              logStatus('Upload OK — vídeo disponível');
+              fileInput.value = '';
+              pendingFile = null;
+
+              try {
+                socket.emit('video-ready', { room, video: payload }, (ack) => {
+                  if (ack && ack.ok) console.log('server ack video-ready');
+                });
+              } catch (err) {
+                try { socket.emit('video-ready', payload); } catch(_) { console.warn('emit video-ready falhou', _); }
+              }
+
+              exitConfirmMode();
+            } catch (err) {
+              console.error('Erro upload (confirm)', err);
+              uploadStatus.textContent = 'Erro no upload';
+              alert('Erro no upload: ' + (err.message || err));
+            }
+            return;
+          }
+
+          alert('Nenhum vídeo selecionado. Escolha um arquivo (clicando no seletor) ou informe um YouTube antes de enviar.');
+        }
+      });
+    }
+
+    // If user selects a file while in confirm mode, pendingFile is already set in fileInput listener.
+
+    sendBtn.addEventListener('click', sendChat);
+    chatInput.addEventListener('keypress', (e)=> { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
+
+    function sendChat(){
+      const txt = chatInput.value.trim(); if (!txt) return; if (!room) return alert('Entre em uma sala primeiro');
+      socket.emit('chat-message', { room, user: nickname || 'Guest', text: txt, ts: nowMs() });
+      chatInput.value='';
+    }
+
+    // wire up some remaining handlers from part2: timeupdate etc.
+    video.addEventListener('timeupdate', updateProgressUI);
+    video.addEventListener('loadedmetadata', ()=> {
+      durationEl.textContent = fmtTime(video.duration);
+      updateProgressUI();
+      updatePlayPauseUI();
+    });
+    video.addEventListener('play', ()=> { updatePlayPauseUI(); sendControl(true); });
+    video.addEventListener('pause', ()=> { updatePlayPauseUI(); sendControl(false); });
+    video.addEventListener('seeked', ()=> { updateProgressUI(); sendControl(!video.paused); });
+
+    // important: keep change button visible even if ended
+    video.addEventListener('ended', ()=> {
+      // do not hide the change button; keep it visible because video still "exists"
+      updatePlayPauseUI();
+      showChangeBtn(true);
+    });
+
+    videoInner.addEventListener('mousemove', (e)=>{ showControlsTemporarily(); });
+    videoInner.addEventListener('touchstart', ()=> showControlsTemporarily());
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && document.activeElement !== chatInput && document.activeElement.tagName.toLowerCase() !== 'input') {
+        e.preventDefault();
+        togglePlay();
+      }
+    });
+
+    // -------------------------
+    // Misc: react to server-provided lobby updates (example)
+    // -------------------------
+    socket.on('room-update', (r) => {
+      if (!r || (!r.name && !r.room)) return;
+      addOrUpdateRoom(r);
+    });
+
+    socket.on('announce-room-created', (r) => {
+      if (!r) return;
+      addOrUpdateRoom(r);
+    });
+
+    // Open lobby automatically on every page load (per your request)
+    window.addEventListener('load', () => {
+      try {
+        lobbyOverlay.style.display = 'flex';
+        lobbyOverlay.setAttribute('aria-hidden','false');
+        setTimeout(()=> {
+          try { lobbySearch.focus(); } catch(e){}
+        }, 120);
+        try { socket.emit('list-rooms'); } catch(e){}
+      } catch (err) { /* ignore */ }
+    });
+
+    // -------------------------
+    // Additional behaviour: reveal/hide app and return button logic + volume control wiring
+    // -------------------------
+    (function(){
+      let inRoom = false;
+
+      function revealAppForRoom() {
+        inRoom = true;
+        window.__sync_in_room = true;
+        try {
+          appRoot.classList.remove('initial-hidden');
+          appRoot.classList.add('revealed');
+
+          updateCreateBtnVisibility();
+
+          // show return button beside create room in header (do not fix by default)
+          if (returnToRoomBtn) {
+            returnToRoomBtn.style.display = 'inline-flex';
+            returnToRoomBtn.classList.remove('return-fixed');
+          }
+          // ensure fechar button visible when in-room
+          if (fecharBtn) {
+            fecharBtn.style.display = 'inline-flex';
+          }
+        } catch(e){}
+      }
+
+      // attach to global so other flows can call if necessary
+      window.revealAppForRoom = revealAppForRoom;
+
+      // If user already created/entered by other means, reveal
+      // (handlers above call revealAppForRoom when create/join confirm are clicked)
+
+      // When opening the lobby while in room, ensure return button visible near create (not fixed)
+      if (openLobbyBtn) {
+        openLobbyBtn.addEventListener('click', () => {
+          if (inRoom && returnToRoomBtn) {
+            returnToRoomBtn.style.display = 'inline-flex';
+            returnToRoomBtn.classList.remove('return-fixed');
+          }
+          if (inRoom && fecharBtn) {
+            fecharBtn.style.display = 'inline-flex';
+          }
+        });
+      }
+
+      // close (return) button should hide overlay but remain visible in header only if in-room
+      if (returnToRoomBtn) {
+        returnToRoomBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          try {
+            lobbyOverlay.style.display = 'none';
+            lobbyOverlay.setAttribute('aria-hidden','true');
+            // if not in room (shouldn't happen), hide the button
+            if (!inRoom) {
+              returnToRoomBtn.style.display = 'none';
+              returnToRoomBtn.classList.remove('return-fixed');
+            }
+          } catch(e){}
+        });
+      }
+
+      function updateCreateBtnVisibility() {
+  if (window.__sync_in_room) {   // se estiver em uma sala
+    openCreateBtn.style.display = 'none';
+  } else {                       // se estiver no lobby
+    openCreateBtn.style.display = 'inline-flex';
+  }
+}
+
+      // expose reveal for external usage
+      window.__syncwave_revealApp = revealAppForRoom;
+    })();
+
+    console.log('Frontend pronto — Lobby FULLSCREEN implementado e evento de criação reforçado.');
+
+    // quality menu toggle binding (if exists)
+    try {
+      if (qualityBtn) qualityBtn.addEventListener('click', toggleQualityMenu);
+    } catch(e){}
+
+   leaveRoomBtn.addEventListener("click", () => {
+
+  if (room) {
+    socket.emit("leave-room", room);
+  }
+
+  // reinicia o site completamente
+  window.location.reload();
+
+});
+
+// ===== Participants overlay: cria comportamento (click no botão abre; X fecha) =====
+(function(){
+  const participantsBtn = document.getElementById('participantsBtn');
+  const chatArea = document.getElementById('chatArea'); // .chat (tem position:relative)
+  if (!participantsBtn || !chatArea) return;
+
+  // cria overlay (se não existir)
+  let overlay = document.querySelector('.participants-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'participants-overlay';
+    overlay.setAttribute('role','dialog');
+    overlay.setAttribute('aria-hidden','true');
+    overlay.innerHTML = `
+      <div class="participants-header">
+        <div style="display:flex;flex-direction:column;">
+          <div class="participants-title">Participantes</div>
+          <div class="participants-count">0 membros</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+        </div>
+      </div>
+      <div class="participants-list" aria-live="polite"></div>
+    `;
+    chatArea.appendChild(overlay);
+  }
+
+
+  const listEl = overlay.querySelector('.participants-list');
+  const countEl = overlay.querySelector('.participants-count');
+
+  // local cache (será atualizado pelo servidor)
+  let currentMembers = [];
+
+  // abre overlay — solicita a lista ao servidor (se existir) e popula com cache
+  function openOverlay(){
+    overlay.classList.add('visible');
+    overlay.setAttribute('aria-hidden','false');
+    // popula com o cache (ou vazio) imediatamente para feedback
+    populateParticipants(currentMembers);
+    // solicita atualização ao servidor (usa safeEmit se disponível)
+    try {
+      if (typeof safeEmit === 'function') safeEmit('request_room_members', { room });
+      else if (socket && typeof socket.emit === 'function') socket.emit('request_room_members', { room });
+    } catch(e){}
+    
+  }
+
+  function closeOverlay(){
+    overlay.classList.remove('visible');
+    overlay.setAttribute('aria-hidden','true');
+  }
+
+  // evita fechar ao clicar dentro da lista
+  overlay.addEventListener('click', (ev) => {
+    // só fecha se clicar exatamente no fundo do overlay (se quiser). 
+    // Mas o requisito era fechar só com o X — então não fechamos ao clicar fora.
+    // if (ev.target === overlay) closeOverlay();
+  });
+
+  // atalho Esc fecha também (agradável ao usuário)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay.classList.contains('visible')) closeOverlay();
+  });
+
+  // popula lista e anima com stagger
+  function populateParticipants(members){
+    currentMembers = Array.isArray(members) ? members : [];
+    listEl.innerHTML = '';
+    countEl.textContent = `${currentMembers.length} ${currentMembers.length === 1 ? 'membro' : 'membros'}`;
+
+    currentMembers.forEach((m, i) => {
+      const baseName = (m && (m.name || m.nick)) ? (m.name || m.nick) : 'Convidado';
+const isHost = m && !!m.host; // qualquer valor truthy será considerado host
+const name = baseName + (isHost ? " (HOST)" : "");
+
+const sub = (m && m.status) ? m.status : (m && m.meta) ? m.meta : 'online';
+const initials = String(baseName).split(' ').map(s=> s[0]).slice(0,2).join('').toUpperCase();
+
+      const it = document.createElement('div');
+      it.className = 'participant-item';
+      it.style.animationDelay = (i * 45) + 'ms';
+      it.innerHTML = `
+        <div class="avatar" aria-hidden="true">${escapeHtml(initials)}</div>
+        <div class="p-meta">
+          <div class="p-name">
+  ${escapeHtml(name)}
+</div>
+          <div class="p-sub">${escapeHtml(sub)}</div>
+        </div>
+      `;
+      listEl.appendChild(it);
+    });
+
+    // se não tiver ninguém, mostra nota
+    if (currentMembers.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'participant-item';
+      empty.style.justifyContent = 'center';
+      empty.style.opacity = '1';
+      empty.style.transform = 'none';
+      empty.innerHTML = `<div style="color:rgba(255,255,255,0.7);font-size:13px">Nenhum participante conectado</div>`;
+      listEl.appendChild(empty);
+    }
+  }
+
+  // small helpers to avoid XSS
+  function escapeHtml(s){
+    if (s === undefined || s === null) return '';
+    return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]); });
+  }
+
+  // click no botão abre (toggle)
+  participantsBtn.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    if (overlay.classList.contains('visible')) closeOverlay();
+    else openOverlay();
+  });
+
+  // -------------- integração socket (se houver)
+  // servidor pode enviar 'room_members' com array de { name, nick, status }
+  try {
+    if (typeof socket !== 'undefined' && socket && typeof socket.on === 'function') {
+      socket.on('room_members', (members) => {
+        if (!Array.isArray(members)) return;
+        currentMembers = members;
+        // atualiza se overlay estiver aberto, ou apenas atualiza cache
+        if (overlay.classList.contains('visible')) populateParticipants(members);
+      });
+    }
+  } catch(e){}
+
+  // expose function globalmente para permitir atualizar manualmente
+  window.populateParticipantsOverlay = populateParticipants;
+
+})();
+
+document.getElementById("themeToggle").style.display = "none";
+
+
+const volBtn = document.getElementById("VolBtn");
+const slider = document.getElementById("volumeSlider");
+const box = document.querySelector(".volume-box");
+const icon = document.getElementById("volIcon");
+
+let volumeTimer;
+
+function hideVolume(){
+  box.classList.remove("active");
+}
+
+volBtn.addEventListener("click", () => {
+
+  box.classList.toggle("active");
+
+  clearTimeout(volumeTimer);
+  volumeTimer = setTimeout(hideVolume, 2500);
+
+});
+
+slider.addEventListener("input", () => {
+
+  video.volume = slider.value;
+
+  clearTimeout(volumeTimer);
+  volumeTimer = setTimeout(hideVolume, 2500);
+
+  if(slider.value == 0){
+
+    icon.innerHTML = `
+    <path d="M3 9v6h4l5 5V4L7 9H3z"/>
+    <line x1="18" y1="8" x2="22" y2="16" stroke="white" stroke-width="2"/>
+    <line x1="22" y1="8" x2="18" y2="16" stroke="white" stroke-width="2"/>
+    `;
+
+  }else{
+
+    icon.innerHTML = `
+    <path d="M3 9v6h4l5 5V4L7 9H3z"/>
+    <path d="M16 8c1.5 1.5 1.5 6.5 0 8" fill="none" stroke="white" stroke-width="2"/>
+    <path d="M19 5c3 3 3 11 0 14" fill="none" stroke="white" stroke-width="2"/>
+    `;
+
+  }
+
+});
+
+
+  </script>
+</body>
+</html>
